@@ -22,7 +22,7 @@ jobs:
         run: |
           mkdir -p app/src/main/java/com/ghost/browser
           mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/mipmap-mdpi
+          mkdir -p app/src/main/res/mipmap-anydpi-v26
 
           # 1. Fix Manifest
           if [ -f AndroidManifest.xml ]; then
@@ -33,12 +33,13 @@ jobs:
           # 2. Move Kotlin Code
           mv MainActivity.kt app/src/main/java/com/ghost/browser/MainActivity.kt || true
 
-          # 3. Create Resources
+          # 3. Create Resources (Colors & Theme)
           cat <<EOF > app/src/main/res/values/colors.xml
           <?xml version="1.0" encoding="utf-8"?><resources>
-          <color name="purple_200">#FFBB86FC</color>
           <color name="purple_500">#FF6200EE</color>
           <color name="teal_200">#FF03DAC5</color>
+          <color name="black">#FF000000</color>
+          <color name="white">#FFFFFFFF</color>
           </resources>
           EOF
           
@@ -47,12 +48,27 @@ jobs:
           <resources>
               <style name="Theme.MaterialComponents.Light.NoActionBar" parent="Theme.MaterialComponents.Light.NoActionBar">
                   <item name="colorPrimary">@color/purple_500</item>
-                  <item name="colorSecondary">@color/teal_200</item>
+                  <item name="android:statusBarColor">@color/black</item>
               </style>
           </resources>
           EOF
 
-          # 4. Create Build Files
+          # 4. CREATE THE MISSING ICON (Adaptive Icon)
+          cat <<EOF > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/purple_500"/>
+              <foreground>
+                  <inset android:inset="25%">
+                      <shape android:shape="oval">
+                          <solid android:color="@color/white"/>
+                      </shape>
+                  </inset>
+              </foreground>
+          </adaptive-icon>
+          EOF
+
+          # 5. Create Build Files
           cat <<EOF > gradle.properties
           android.useAndroidX=true
           android.enableJetifier=true
@@ -96,7 +112,6 @@ jobs:
               implementation 'androidx.activity:activity-compose:1.7.2'
               implementation 'androidx.compose.ui:ui:1.4.3'
               implementation 'androidx.compose.material:material:1.4.3'
-              // THIS IS THE MISSING KEY:
               implementation 'com.google.android.material:material:1.9.0'
           }
           EOF
