@@ -14,29 +14,26 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Create Android Structure
+      - name: Create Structure and Clean Files
         run: |
           mkdir -p app/src/main/java/com/example/kotlinbrowser
           mkdir -p app/src/main/res/values
-          cp MainActivity.kt app/src/main/java/com/example/kotlinbrowser/ || true
+          
+          # Force clean the uploaded files (remove hidden Windows characters if any)
+          sed -i 's/\r$//' MainActivity.kt || true
+          sed -i 's/\r$//' AndroidManifest.xml || true
+          
+          # Move to structure
+          cp MainActivity.kt app/src/main/java/com/example/kotlinbrowser/MainActivity.kt || true
           cp AndroidManifest.xml app/src/main/AndroidManifest.xml || true
 
-      - name: Generate Gradle Configuration
+      - name: Generate Stable Gradle Config
         run: |
           cat <<EOF > settings.gradle.kts
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
+              repositories { google(); mavenCentral() }
           }
           rootProject.name = "GhostBrowser"
           include(":app")
@@ -50,10 +47,7 @@ jobs:
           EOF
 
           cat <<EOF > app/build.gradle.kts
-          plugins {
-              id("com.android.application")
-              id("org.jetbrains.kotlin.android")
-          }
+          plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
           android {
               namespace = "com.example.kotlinbrowser"
               compileSdk = 34
@@ -73,22 +67,24 @@ jobs:
               implementation(platform("androidx.compose:compose-bom:2023.10.01"))
               implementation("androidx.compose.ui:ui")
               implementation("androidx.compose.material3:material3")
-              implementation("androidx.webkit:webkit:1.10.0")
+              implementation("androidx.webkit:webkit:1.11.0")
           }
           EOF
 
-      - name: Force Install Stable Gradle 8.5
+      - name: Manual Gradle Setup
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip
           ./gradle-8.5/bin/gradle wrapper --gradle-version 8.5
 
-      - name: Build Debug APK
+      - name: Build APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
-          
+          # This command will show us exactly where the code error is if it fails
+          ./gradlew assembleDebug --no-daemon
+
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: GhostBrowser-APK
