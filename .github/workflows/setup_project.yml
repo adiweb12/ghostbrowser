@@ -27,7 +27,14 @@ jobs:
           mv AndroidManifest.xml app/src/main/AndroidManifest.xml || true
           mv MainActivity.kt app/src/main/java/com/ghost/browser/MainActivity.kt || true
 
-          # Create settings.gradle.kts (Modern Kotlin version)
+          # 1. ADD GRADLE PROPERTIES (Crucial Fix)
+          cat <<EOF > gradle.properties
+          android.useAndroidX=true
+          android.enableJetifier=true
+          kotlin.code.style=official
+          EOF
+
+          # 2. Create settings.gradle.kts
           cat <<EOF > settings.gradle.kts
           pluginManagement {
               repositories { google(); mavenCentral(); gradlePluginPortal() }
@@ -40,7 +47,7 @@ jobs:
           include(":app")
           EOF
 
-          # Create root build.gradle.kts
+          # 3. Create root build.gradle.kts
           cat <<EOF > build.gradle.kts
           plugins {
               id("com.android.application") version "8.2.2" apply false
@@ -48,7 +55,7 @@ jobs:
           }
           EOF
 
-          # Create app/build.gradle.kts
+          # 4. Create app/build.gradle.kts
           cat <<EOF > app/build.gradle.kts
           plugins {
               id("com.android.application")
