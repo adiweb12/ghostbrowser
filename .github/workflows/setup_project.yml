@@ -126,3 +126,4 @@ jobs:
         with:
           name: ghost-browser-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          
