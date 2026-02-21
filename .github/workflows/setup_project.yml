@@ -33,14 +33,26 @@ jobs:
           # 2. Move Kotlin Code
           mv MainActivity.kt app/src/main/java/com/ghost/browser/MainActivity.kt || true
 
-          # 3. Create Resources & Build Files
+          # 3. Create Resources
           cat <<EOF > app/src/main/res/values/colors.xml
-          <?xml version="1.0" encoding="utf-8"?><resources><color name="purple_200">#FFBB86FC</color></resources>
+          <?xml version="1.0" encoding="utf-8"?><resources>
+          <color name="purple_200">#FFBB86FC</color>
+          <color name="purple_500">#FF6200EE</color>
+          <color name="teal_200">#FF03DAC5</color>
+          </resources>
           EOF
+          
           cat <<EOF > app/src/main/res/values/themes.xml
-          <?xml version="1.0" encoding="utf-8"?><resources><style name="Theme.MaterialComponents.Light.NoActionBar" parent="Theme.AppCompat.Light.NoActionBar" /></resources>
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.MaterialComponents.Light.NoActionBar" parent="Theme.MaterialComponents.Light.NoActionBar">
+                  <item name="colorPrimary">@color/purple_500</item>
+                  <item name="colorSecondary">@color/teal_200</item>
+              </style>
+          </resources>
           EOF
 
+          # 4. Create Build Files
           cat <<EOF > gradle.properties
           android.useAndroidX=true
           android.enableJetifier=true
@@ -84,13 +96,15 @@ jobs:
               implementation 'androidx.activity:activity-compose:1.7.2'
               implementation 'androidx.compose.ui:ui:1.4.3'
               implementation 'androidx.compose.material:material:1.4.3'
+              // THIS IS THE MISSING KEY:
+              implementation 'com.google.android.material:material:1.9.0'
           }
           EOF
 
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: 8.4 # Explicitly force a stable version
+          gradle-version: 8.4
 
       - name: Build APK
         run: gradle assembleDebug
