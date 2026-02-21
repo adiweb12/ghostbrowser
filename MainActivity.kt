@@ -30,10 +30,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Essential for Android 15 & 16 (Edge-to-Edge)
         enableEdgeToEdge()
-        
         setContent {
             MaterialTheme {
                 BrowserScreen()
@@ -48,10 +45,9 @@ fun BrowserScreen() {
     var url by remember { mutableStateOf("https://www.google.com") }
     var inputTxt by remember { mutableStateOf("https://www.google.com") }
     var webView: WebView? by remember { mutableStateOf(null) }
-    var progress by remember { mutableIntStateOf(0) }
+    var progressValue by remember { mutableIntStateOf(0) }
     val focusManager = LocalFocusManager.current
 
-    // Handle System Back Button to go back in browser history
     BackHandler(enabled = webView?.canGoBack() == true) {
         webView?.goBack()
     }
@@ -73,9 +69,7 @@ fun BrowserScreen() {
                             Icon(Icons.Default.Refresh, contentDescription = null)
                         }
                     },
-                    keyboardOptions = KeyboardOptions(
-                        imeAction = ImeAction.Go
-                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(
                         onGo = {
                             val formattedUrl = if (inputTxt.contains(".")) {
@@ -94,10 +88,10 @@ fun BrowserScreen() {
                     )
                 )
                 
-                // Progress Bar
-                if (progress < 100) {
+                if (progressValue < 100) {
+                    // FIXED: Removed lambda brackets to satisfy Material3 API
                     LinearProgressIndicator(
-                        progress = { progress / 100f },
+                        progress = progressValue / 100f,
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -108,7 +102,7 @@ fun BrowserScreen() {
         Box(modifier = Modifier.padding(paddingValues)) {
             ComposeWebView(
                 url = url,
-                onProgressChanged = { progress = it },
+                onProgressChanged = { progressValue = it },
                 onUrlChanged = { 
                     inputTxt = it 
                     url = it
@@ -139,10 +133,6 @@ fun ComposeWebView(
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         url?.let { onUrlChanged(it) }
                     }
-
-                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                        return false // Let WebView handle the link
-                    }
                 }
 
                 webChromeClient = object : WebChromeClient() {
@@ -156,7 +146,6 @@ fun ComposeWebView(
             }
         },
         update = { view ->
-            // Only load if the URL is different to prevent infinite loops
             if (view.url != url) {
                 view.loadUrl(url)
             }
