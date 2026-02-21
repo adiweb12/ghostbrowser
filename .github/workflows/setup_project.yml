@@ -1,9 +1,9 @@
-name: Build Ghost Browser
+name: Ghost Browser APK Generator
 
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch: # Allows you to run it manually from your phone
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,24 +12,30 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Create Android Structure
+      - name: Create Full Android Project Structure
         run: |
-          # 1. Create the folder hierarchy for a standard project
+          # Create folders
           mkdir -p app/src/main/java/com/ghost/browser
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/mipmap-mdpi
-          
-          # 2. Move your Manifest to the correct spot
-          # Assumes your file is currently in the root named 'AndroidManifest.xml'
-          mv AndroidManifest.xml app/src/main/AndroidManifest.xml
-          
-          # 3. Move your Kotlin file to the package folder
-          # Assumes your file is currently in the root named 'MainActivity.kt'
-          mv MainActivity.kt app/src/main/java/com/ghost/browser/MainActivity.kt
 
-      - name: Generate Build Files
-        run: |
-          # Create a basic build.gradle for the app
+          # Move your existing files into the structure
+          mv AndroidManifest.xml app/src/main/AndroidManifest.xml || echo "Manifest already in place"
+          mv MainActivity.kt app/src/main/java/com/ghost/browser/MainActivity.kt || echo "Main already in place"
+
+          # Create settings.gradle
+          echo "include ':app'" > settings.gradle
+
+          # Create root build.gradle
+          cat <<EOF > build.gradle
+          buildscript {
+              repositories { google(); mavenCentral() }
+              dependencies { classpath 'com.android.tools.build:gradle:8.1.1'; classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.20" }
+          }
+          allprojects { repositories { google(); mavenCentral() } }
+          EOF
+
+          # Create app/build.gradle
           cat <<EOF > app/build.gradle
           plugins {
               id 'com.android.application'
@@ -45,12 +51,15 @@ jobs:
                   versionCode 1
                   versionName "1.0"
               }
+              buildFeatures { compose true }
+              composeOptions { kotlinCompilerExtensionVersion '1.4.5' }
           }
           dependencies {
               implementation 'androidx.core:core-ktx:1.12.0'
-              implementation 'androidx.compose.ui:ui:1.5.4'
-              implementation 'androidx.compose.material:material:1.5.4'
-              implementation 'androidx.activity:activity-compose:1.8.1'
+              implementation 'androidx.compose.ui:ui:1.4.3'
+              implementation 'androidx.compose.material:material:1.4.3'
+              implementation 'androidx.activity:activity-compose:1.7.2'
+              implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.1'
           }
           EOF
 
@@ -59,10 +68,14 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew || true
+      - name: Build Debug APK
+        run: |
+          # Use the built-in gradle if wrapper is missing
+          gradle assembleDebug
 
-      - name: Build with Gradle
-        run: ./gradlew assembleDebug || echo "Gradle wrapper missing, initialization required."
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghost-browser-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
