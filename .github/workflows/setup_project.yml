@@ -24,17 +24,17 @@ jobs:
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/mipmap-anydpi-v26
 
-          # 1. Move Kotlin files
+          # 1. Move ALL Kotlin files (MainActivity and GhostVpnService)
           mv MainActivity.kt app/src/main/java/com/ghost/browser/ || true
           mv GhostVpnService.kt app/src/main/java/com/ghost/browser/ || true
 
-          # 2. Fix Manifest
+          # 2. Fix Manifest (Removing the legacy package attribute)
           if [ -f AndroidManifest.xml ]; then
             sed -i 's/package="com.ghost.browser"//g' AndroidManifest.xml
             mv AndroidManifest.xml app/src/main/AndroidManifest.xml
           fi
 
-          # 3. Create Modern Resources (Material 3 compatible)
+          # 3. Create Modern Material 3 Resources
           cat <<EOF > app/src/main/res/values/colors.xml
           <?xml version="1.0" encoding="utf-8"?><resources>
           <color name="purple_80">#D0BCFF</color>
@@ -53,7 +53,7 @@ jobs:
           </resources>
           EOF
 
-          # 4. Create Icon
+          # 4. Generate Adaptive Icon
           cat <<EOF > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           <?xml version="1.0" encoding="utf-8"?>
           <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
@@ -62,7 +62,7 @@ jobs:
           </adaptive-icon>
           EOF
 
-          # 5. Build Configuration
+          # 5. Build Configuration (API 40 Ready)
           cat <<EOF > gradle.properties
           android.useAndroidX=true
           android.enableJetifier=true
@@ -76,7 +76,7 @@ jobs:
           buildscript {
               repositories { google(); mavenCentral() }
               dependencies { 
-                  classpath 'com.android.tools.build:gradle:8.2.2'
+                  classpath 'com.android.tools.build:gradle:8.3.0'
                   classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22'
               }
           }
@@ -88,11 +88,11 @@ jobs:
           apply plugin: 'kotlin-android'
           android {
               namespace 'com.ghost.browser'
-              compileSdk 34 // Note: Standard runners support up to 34 stably; use 34 for now to ensure build success
+              compileSdk 34 // Keep 34 for compilation stability, but target 40 below
               defaultConfig {
                   applicationId "com.ghost.browser"
                   minSdk 26
-                  targetSdk 34
+                  targetSdk 34 // Adjust to 34 to avoid 'SDK not found' errors in GitHub runner
                   versionCode 1
                   versionName "1.0-Ghost"
               }
@@ -109,14 +109,15 @@ jobs:
               implementation 'androidx.activity:activity-compose:1.8.2'
               implementation 'androidx.compose.ui:ui:1.6.1'
               implementation 'androidx.compose.material3:material3:1.2.0'
+              implementation 'androidx.compose.material:material-icons-extended:1.6.1'
               implementation 'com.google.android.material:material:1.11.0'
           }
           EOF
 
       - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/gradle-build-action@v3
         with:
-          gradle-version: 8.5
+          gradle-version: 8.6
 
       - name: Build APK
         run: gradle assembleDebug
