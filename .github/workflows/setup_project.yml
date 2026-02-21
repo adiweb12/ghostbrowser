@@ -64,7 +64,10 @@ jobs:
           EOF
 
           cat <<EOF > app/build.gradle.kts
-          plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
+          plugins { 
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android") 
+          }
           android {
               namespace = "com.example.kotlinbrowser"
               compileSdk = 34
@@ -75,7 +78,6 @@ jobs:
                   versionCode = 1
                   versionName = "1.0"
               }
-              # FIX: Explicitly set Java 17 for both Java and Kotlin
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
