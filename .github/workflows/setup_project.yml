@@ -19,13 +19,18 @@ jobs:
           mkdir -p app/src/main/java/com/example/kotlinbrowser
           mkdir -p app/src/main/res/values
           
-          # Force clean the uploaded files (remove hidden Windows characters if any)
+          # Clean hidden characters and move files
           sed -i 's/\r$//' MainActivity.kt || true
           sed -i 's/\r$//' AndroidManifest.xml || true
-          
-          # Move to structure
           cp MainActivity.kt app/src/main/java/com/example/kotlinbrowser/MainActivity.kt || true
           cp AndroidManifest.xml app/src/main/AndroidManifest.xml || true
+
+      - name: Generate Gradle Properties (The Fix)
+        run: |
+          # This enables AndroidX and Jetifier which was causing your error
+          echo "android.useAndroidX=true" > gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
+          echo "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8" >> gradle.properties
 
       - name: Generate Stable Gradle Config
         run: |
@@ -80,7 +85,6 @@ jobs:
       - name: Build APK
         run: |
           chmod +x gradlew
-          # This command will show us exactly where the code error is if it fails
           ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
