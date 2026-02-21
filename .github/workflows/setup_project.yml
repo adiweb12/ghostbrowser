@@ -20,24 +20,25 @@ jobs:
 
       - name: Setup Project Structure
         run: |
+          # Create the package folders
           mkdir -p app/src/main/java/com/ghost/browser
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/mipmap-anydpi-v26
 
-          # 1. Fix Manifest
+          # 1. Move ALL Kotlin files to the package folder
+          mv MainActivity.kt app/src/main/java/com/ghost/browser/ || true
+          mv GhostVpnService.kt app/src/main/java/com/ghost/browser/ || true
+
+          # 2. Fix & Move Manifest
           if [ -f AndroidManifest.xml ]; then
             sed -i 's/package="com.ghost.browser"//g' AndroidManifest.xml
             mv AndroidManifest.xml app/src/main/AndroidManifest.xml
           fi
 
-          # 2. Move Kotlin Code
-          mv MainActivity.kt app/src/main/java/com/ghost/browser/MainActivity.kt || true
-
-          # 3. Create Resources
+          # 3. Create Resources (Matching the style in your Manifest)
           cat <<EOF > app/src/main/res/values/colors.xml
           <?xml version="1.0" encoding="utf-8"?><resources>
           <color name="purple_500">#FF6200EE</color>
-          <color name="teal_200">#FF03DAC5</color>
           <color name="black">#FF000000</color>
           <color name="white">#FFFFFFFF</color>
           </resources>
@@ -46,8 +47,7 @@ jobs:
           cat <<EOF > app/src/main/res/values/themes.xml
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <style name="Theme.MaterialComponents.Light.NoActionBar" parent="Theme.MaterialComponents.Light.NoActionBar">
-                  <item name="colorPrimary">@color/purple_500</item>
+              <style name="EdgeToEdge" parent="Theme.MaterialComponents.Light.NoActionBar">
                   <item name="android:statusBarColor">@color/black</item>
               </style>
           </resources>
@@ -57,12 +57,8 @@ jobs:
           cat <<EOF > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           <?xml version="1.0" encoding="utf-8"?>
           <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-              <background android:drawable="@color/purple_500"/>
-              <foreground>
-                  <inset android:inset="25%">
-                      <shape android:shape="oval"><solid android:color="@color/white"/></shape>
-                  </inset>
-              </foreground>
+              <background android:drawable="@color/black"/>
+              <foreground><inset android:inset="25%"><shape android:shape="oval"><solid android:color="@color/white"/></shape></inset></foreground>
           </adaptive-icon>
           EOF
 
@@ -84,9 +80,7 @@ jobs:
                   classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.10'
               }
           }
-          allprojects {
-              repositories { google(); mavenCentral() }
-          }
+          allprojects { repositories { google(); mavenCentral() } }
           EOF
 
           cat <<EOF > app/build.gradle
@@ -102,20 +96,17 @@ jobs:
                   versionCode 1
                   versionName "1.0"
               }
-              // FIX: Syncing Java and Kotlin versions
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
               }
-              kotlinOptions {
-                  jvmTarget = '17'
-              }
+              kotlinOptions { jvmTarget = '17' }
               buildFeatures { compose true }
               composeOptions { kotlinCompilerExtensionVersion '1.4.3' }
           }
           dependencies {
               implementation 'androidx.core:core-ktx:1.10.1'
-              implementation 'androidx.activity:activity-compose:1.7.2'
+              implementation 'androidx.activity:activity-compose:1.8.2'
               implementation 'androidx.compose.ui:ui:1.4.3'
               implementation 'androidx.compose.material:material:1.4.3'
               implementation 'com.google.android.material:material:1.9.0'
