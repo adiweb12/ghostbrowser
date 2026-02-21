@@ -4,45 +4,64 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import kotlin.concurrent.thread
 
 class GhostVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
+    private var vpnThread: Thread? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Start the VPN logic
         establishVpn()
         return START_STICKY
     }
 
     private fun establishVpn() {
         try {
-            val builder = Builder()
-
-            vpnInterface = builder
+            vpnInterface = Builder()
                 .setSession("GhostTunnel")
-                // Internal virtual IP address
-                .addAddress("10.0.0.2", 24) 
-                // FORCE PRIVACY DNS: Prevents ISP from tracking your searches
+                .addAddress("10.0.0.2", 24)
                 .addDnsServer("1.1.1.1")
-                .addDnsServer("8.8.8.8")
-                // ROUTE EVERYTHING: Sends all browser traffic through the tunnel
-                .addRoute("0.0.0.0", 0) 
-                // MTU: Set to 1500 for maximum speed/compatibility
+                .addRoute("0.0.0.0", 0)
                 .setMtu(1500)
-                // App-Specific: Only route this browser, not the whole phone
-                .addAllowedApplication("com.ghost.browser") 
+                .addAllowedApplication("com.ghost.browser")
                 .establish()
 
-            Log.d("GhostVPN", "VPN Tunnel Established successfully")
+            // START PACKET HANDLER
+            vpnThread = thread(start = true, name = "GhostPacketHandler") {
+                runPacketLoop()
+            }
         } catch (e: Exception) {
-            Log.e("GhostVPN", "Failed to start VPN: ${e.localizedMessage}")
+            Log.e("GhostVPN", "Setup Error: ${e.localizedMessage}")
         }
     }
 
-    override fun onRevoke() {
-        // Called if the user turns off the VPN from Android Settings
-        stopVpn()
-        super.onRevoke()
+    private fun runPacketLoop() {
+        val input = FileInputStream(vpnInterface?.fileDescriptor)
+        val output = FileOutputStream(vpnInterface?.fileDescriptor)
+        val buffer = ByteBuffer.allocate(32768)
+
+        try {
+            while (!Thread.interrupted()) {
+                val length = input.read(buffer.array())
+                if (length > 0) {
+                    // In a production app, you'd forward these packets 
+                    // to a remote server here via a Socket.
+                    Log.d("GhostVPN", "Intercepted packet of size: $length")
+                }
+                Thread.sleep(10) // Prevents 100% CPU usage
+            }
+        } catch (e: Exception) {
+            Log.e("GhostVPN", "Loop Error: ${e.localizedMessage}")
+        }
+    }
+
+    private fun stopVpn() {
+        vpnThread?.interrupt()
+        vpnInterface?.close()
+        vpnInterface = null
     }
 
     override fun onDestroy() {
@@ -50,9 +69,8 @@ class GhostVpnService : VpnService() {
         super.onDestroy()
     }
 
-    private fun stopVpn() {
-        vpnInterface?.close()
-        vpnInterface = null
-        Log.d("GhostVPN", "VPN Tunnel Closed")
+    override fun onRevoke() {
+        stopVpn()
+        super.onRevoke()
     }
 }
