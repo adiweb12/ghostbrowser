@@ -1,137 +1,166 @@
-package com.ghost.browser
+package com.example.kotlinbrowser
 
 import android.annotation.SuppressLint
-import android.app.DownloadManager
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.net.VpnService
+import android.graphics.Bitmap
 import android.os.Bundle
-import android.os.Environment
-import android.view.ViewGroup
-import android.webkit.*
-import android.widget.Toast
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
 class MainActivity : ComponentActivity() {
-
-    private val vpnLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            startService(Intent(this, GhostVpnService::class.java))
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Essential for Android 15 & 16 (Edge-to-Edge)
         enableEdgeToEdge()
+        
         setContent {
             MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    GhostBrowserUI(onVpnClick = { prepareVpn() })
-                }
+                BrowserScreen()
             }
         }
-    }
-
-    private fun prepareVpn() {
-        val intent = VpnService.prepare(this)
-        if (intent != null) vpnLauncher.launch(intent)
-        else startService(Intent(this, GhostVpnService::class.java))
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun GhostBrowserUI(onVpnClick: () -> Unit) {
-    var urlInput by remember { mutableStateOf("https://duckduckgo.com") }
-    var webViewInstance by remember { mutableStateOf<WebView?>(null) }
-    var vpnEnabled by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+fun BrowserScreen() {
+    var url by remember { mutableStateOf("https://www.google.com") }
+    var inputTxt by remember { mutableStateOf("https://www.google.com") }
+    var webView: WebView? by remember { mutableStateOf(null) }
+    var progress by remember { mutableIntStateOf(0) }
+    val focusManager = LocalFocusManager.current
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-        Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = urlInput,
-                onValueChange = { urlInput = it },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                leadingIcon = {
-                    IconButton(onClick = { 
-                        vpnEnabled = !vpnEnabled
-                        onVpnClick() 
-                    }) {
-                        Icon(Icons.Default.Lock, contentDescription = "VPN", tint = if(vpnEnabled) Color.Green else Color.Gray)
-                    }
+    // Handle System Back Button to go back in browser history
+    BackHandler(enabled = webView?.canGoBack() == true) {
+        webView?.goBack()
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            Column(modifier = Modifier.statusBarsPadding()) {
+                TextField(
+                    value = inputTxt,
+                    onValueChange = { inputTxt = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    placeholder = { Text("Search Google or type URL") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    trailingIcon = {
+                        IconButton(onClick = { webView?.reload() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = null)
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Go
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onGo = {
+                            val formattedUrl = if (inputTxt.contains(".")) {
+                                if (inputTxt.startsWith("http")) inputTxt else "https://$inputTxt"
+                            } else {
+                                "https://www.google.com/search?q=$inputTxt"
+                            }
+                            url = formattedUrl
+                            focusManager.clearFocus()
+                        }
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent
+                    )
+                )
+                
+                // Progress Bar
+                if (progress < 100) {
+                    LinearProgressIndicator(
+                        progress = { progress / 100f },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                 }
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = {
-                val target = if (urlInput.contains(".")) {
-                    if (urlInput.startsWith("http")) urlInput else "https://$urlInput"
-                } else "https://duckduckgo.com/?q=${urlInput.replace(" ", "+")}"
-                webViewInstance?.loadUrl(target)
-            }) {
-                Icon(Icons.Default.ArrowForward, contentDescription = "Go")
             }
         }
-
-        AndroidView(
-            modifier = Modifier.weight(1f).fillMaxWidth().navigationBarsPadding(),
-            factory = { ctx ->
-                WebView(ctx).apply {
-                    webViewInstance = this
-                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = false
-                    settings.cacheMode = WebSettings.LOAD_NO_CACHE
-                    settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36"
-                    
-                    webViewClient = object : WebViewClient() {
-                        override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-                            val url = request?.url.toString()
-                            if (url.contains(".mp4") || url.contains(".m3u8")) {
-                                // Logic for detected media
-                            }
-                            return super.shouldInterceptRequest(view, request)
-                        }
-                    }
-
-                    setOnLongClickListener {
-                        val result = hitTestResult
-                        result.extra?.let { executeDownload(context, it) }
-                        true
-                    }
-                    loadUrl(urlInput)
-                }
-            }
-        )
+    ) { paddingValues ->
+        Box(modifier = Modifier.padding(paddingValues)) {
+            ComposeWebView(
+                url = url,
+                onProgressChanged = { progress = it },
+                onUrlChanged = { 
+                    inputTxt = it 
+                    url = it
+                },
+                onWebViewCreated = { webView = it }
+            )
+        }
     }
 }
 
-fun executeDownload(context: Context, url: String) {
-    val request = DownloadManager.Request(Uri.parse(url))
-        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "Ghost_${System.currentTimeMillis()}")
-    (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
-    Toast.makeText(context, "Ghost Download Started", Toast.LENGTH_SHORT).show()
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun ComposeWebView(
+    url: String,
+    onProgressChanged: (Int) -> Unit,
+    onUrlChanged: (String) -> Unit,
+    onWebViewCreated: (WebView) -> Unit
+) {
+    AndroidView(
+        factory = { context ->
+            WebView(context).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.loadWithOverviewMode = true
+                settings.useWideViewPort = true
+                
+                webViewClient = object : WebViewClient() {
+                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                        url?.let { onUrlChanged(it) }
+                    }
+
+                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                        return false // Let WebView handle the link
+                    }
+                }
+
+                webChromeClient = object : WebChromeClient() {
+                    override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                        onProgressChanged(newProgress)
+                    }
+                }
+                
+                onWebViewCreated(this)
+                loadUrl(url)
+            }
+        },
+        update = { view ->
+            // Only load if the URL is different to prevent infinite loops
+            if (view.url != url) {
+                view.loadUrl(url)
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
 }
