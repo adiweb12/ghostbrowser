@@ -20,25 +20,24 @@ jobs:
 
       - name: Setup Project Structure
         run: |
-          # Create the package folders
           mkdir -p app/src/main/java/com/ghost/browser
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/mipmap-anydpi-v26
 
-          # 1. Move ALL Kotlin files to the package folder
+          # 1. Move Kotlin files
           mv MainActivity.kt app/src/main/java/com/ghost/browser/ || true
           mv GhostVpnService.kt app/src/main/java/com/ghost/browser/ || true
 
-          # 2. Fix & Move Manifest
+          # 2. Fix Manifest
           if [ -f AndroidManifest.xml ]; then
             sed -i 's/package="com.ghost.browser"//g' AndroidManifest.xml
             mv AndroidManifest.xml app/src/main/AndroidManifest.xml
           fi
 
-          # 3. Create Resources (Matching the style in your Manifest)
+          # 3. Create Modern Resources (Material 3 compatible)
           cat <<EOF > app/src/main/res/values/colors.xml
           <?xml version="1.0" encoding="utf-8"?><resources>
-          <color name="purple_500">#FF6200EE</color>
+          <color name="purple_80">#D0BCFF</color>
           <color name="black">#FF000000</color>
           <color name="white">#FFFFFFFF</color>
           </resources>
@@ -47,8 +46,9 @@ jobs:
           cat <<EOF > app/src/main/res/values/themes.xml
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <style name="EdgeToEdge" parent="Theme.MaterialComponents.Light.NoActionBar">
-                  <item name="android:statusBarColor">@color/black</item>
+              <style name="EdgeToEdge" parent="Theme.Material3.DayNight.NoActionBar">
+                  <item name="android:statusBarColor">@android:color/transparent</item>
+                  <item name="android:navigationBarColor">@android:color/transparent</item>
               </style>
           </resources>
           EOF
@@ -58,11 +58,11 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
               <background android:drawable="@color/black"/>
-              <foreground><inset android:inset="25%"><shape android:shape="oval"><solid android:color="@color/white"/></shape></inset></foreground>
+              <foreground><inset android:inset="25%"><shape android:shape="oval"><solid android:color="@color/purple_80"/></shape></inset></foreground>
           </adaptive-icon>
           EOF
 
-          # 5. Create Build Files
+          # 5. Build Configuration
           cat <<EOF > gradle.properties
           android.useAndroidX=true
           android.enableJetifier=true
@@ -76,8 +76,8 @@ jobs:
           buildscript {
               repositories { google(); mavenCentral() }
               dependencies { 
-                  classpath 'com.android.tools.build:gradle:8.1.1'
-                  classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.10'
+                  classpath 'com.android.tools.build:gradle:8.2.2'
+                  classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22'
               }
           }
           allprojects { repositories { google(); mavenCentral() } }
@@ -88,13 +88,13 @@ jobs:
           apply plugin: 'kotlin-android'
           android {
               namespace 'com.ghost.browser'
-              compileSdk 34
+              compileSdk 34 // Note: Standard runners support up to 34 stably; use 34 for now to ensure build success
               defaultConfig {
                   applicationId "com.ghost.browser"
-                  minSdk 24
+                  minSdk 26
                   targetSdk 34
                   versionCode 1
-                  versionName "1.0"
+                  versionName "1.0-Ghost"
               }
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
@@ -102,21 +102,21 @@ jobs:
               }
               kotlinOptions { jvmTarget = '17' }
               buildFeatures { compose true }
-              composeOptions { kotlinCompilerExtensionVersion '1.4.3' }
+              composeOptions { kotlinCompilerExtensionVersion '1.5.8' }
           }
           dependencies {
-              implementation 'androidx.core:core-ktx:1.10.1'
+              implementation 'androidx.core:core-ktx:1.12.0'
               implementation 'androidx.activity:activity-compose:1.8.2'
-              implementation 'androidx.compose.ui:ui:1.4.3'
-              implementation 'androidx.compose.material:material:1.4.3'
-              implementation 'com.google.android.material:material:1.9.0'
+              implementation 'androidx.compose.ui:ui:1.6.1'
+              implementation 'androidx.compose.material3:material3:1.2.0'
+              implementation 'com.google.android.material:material:1.11.0'
           }
           EOF
 
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: 8.4
+          gradle-version: 8.5
 
       - name: Build APK
         run: gradle assembleDebug
@@ -126,4 +126,3 @@ jobs:
         with:
           name: ghost-browser-apk
           path: app/build/outputs/apk/debug/app-debug.apk
-          
