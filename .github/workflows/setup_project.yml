@@ -13,23 +13,21 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          # Cache is removed to prevent the "No file matched" error
-          
+
       - name: Create Android Structure
         run: |
           mkdir -p app/src/main/java/com/example/kotlinbrowser
           mkdir -p app/src/main/res/values
-          # Move your manual files. '|| true' prevents error if files are already moved.
-          mv MainActivity.kt app/src/main/java/com/example/kotlinbrowser/ || true
-          mv AndroidManifest.xml app/src/main/AndroidManifest.xml || true
+          # Use copy (cp) instead of move (mv) to keep your root files safe
+          cp MainActivity.kt app/src/main/java/com/example/kotlinbrowser/ || true
+          cp AndroidManifest.xml app/src/main/AndroidManifest.xml || true
 
       - name: Generate Gradle Configuration
         run: |
-          # 1. Create settings.gradle.kts
-          echo "rootProject.name = 'GhostBrowser'" > settings.gradle.kts
-          echo "include(':app')" >> settings.gradle.kts
+          # FIX: Using double quotes (") instead of single quotes (')
+          echo "rootProject.name = \"GhostBrowser\"" > settings.gradle.kts
+          echo "include(\":app\")" >> settings.gradle.kts
 
-          # 2. Create Root build.gradle.kts
           cat <<EOF > build.gradle.kts
           plugins {
               id("com.android.application") version "8.2.2" apply false
@@ -37,7 +35,6 @@ jobs:
           }
           EOF
 
-          # 3. Create App build.gradle.kts
           cat <<EOF > app/build.gradle.kts
           plugins {
               id("com.android.application")
@@ -54,7 +51,7 @@ jobs:
                   versionName = "1.0"
               }
               buildFeatures { compose = true }
-              composeOptions { kotlinCompilerExtensionVersion = "1.5.4" }
+              composeOptions { kotlinCompilerExtensionVersion = "1.5.1" }
               kotlinOptions { jvmTarget = "17" }
           }
           dependencies {
@@ -72,7 +69,7 @@ jobs:
       - name: Build Debug APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew clean assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
