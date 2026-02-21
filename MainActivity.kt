@@ -3,7 +3,9 @@ package com.ghost.browser
 import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.net.VpnService
 import android.os.Bundle
 import android.os.Environment
 import android.view.ViewGroup
@@ -12,10 +14,12 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,126 +32,95 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
 class MainActivity : ComponentActivity() {
+
+    private val vpnLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            startService(Intent(this, GhostVpnService::class.java))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Android 16+ Edge-to-Edge support
         enableEdgeToEdge()
-
         setContent {
-            // Material3 Theme wrapper to prevent black screen
             MaterialTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    GhostBrowserUI()
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    GhostBrowserUI(onVpnClick = { prepareVpn() })
                 }
             }
         }
+    }
+
+    private fun prepareVpn() {
+        val intent = VpnService.prepare(this)
+        if (intent != null) vpnLauncher.launch(intent)
+        else startService(Intent(this, GhostVpnService::class.java))
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun GhostBrowserUI() {
+fun GhostBrowserUI(onVpnClick: () -> Unit) {
     var urlInput by remember { mutableStateOf("https://duckduckgo.com") }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+    var vpnEnabled by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding() // Fixed: Address bar won't hide under the clock
-    ) {
-        // --- PRO UI: CUSTOM ADDRESS BAR ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = urlInput,
                 onValueChange = { urlInput = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Search or type URL") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                trailingIcon = {
-                    IconButton(onClick = { webViewInstance?.reload() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Reload")
+                leadingIcon = {
+                    IconButton(onClick = { 
+                        vpnEnabled = !vpnEnabled
+                        onVpnClick() 
+                    }) {
+                        Icon(Icons.Default.Lock, contentDescription = "VPN", tint = if(vpnEnabled) Color.Green else Color.Gray)
                     }
                 }
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = {
-                    val target = if (urlInput.contains(".")) {
-                        if (urlInput.startsWith("http")) urlInput else "https://$urlInput"
-                    } else {
-                        "https://duckduckgo.com/?q=${urlInput.replace(" ", "+")}"
-                    }
-                    webViewInstance?.loadUrl(target)
-                },
-                contentPadding = PaddingValues(0.dp)
-            ) {
+            Button(onClick = {
+                val target = if (urlInput.contains(".")) {
+                    if (urlInput.startsWith("http")) urlInput else "https://$urlInput"
+                } else "https://duckduckgo.com/?q=${urlInput.replace(" ", "+")}"
+                webViewInstance?.loadUrl(target)
+            }) {
                 Icon(Icons.Default.ArrowForward, contentDescription = "Go")
             }
         }
 
-        // --- THE BROWSER ENGINE ---
         AndroidView(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .navigationBarsPadding(), // Fixed: Home buttons won't overlap
+            modifier = Modifier.weight(1f).fillMaxWidth().navigationBarsPadding(),
             factory = { ctx ->
                 WebView(ctx).apply {
                     webViewInstance = this
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-
-                    // PROFESSIONAL BROWSER SETTINGS
-                    settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = false // Ghost Mode (No permanent storage)
-                        cacheMode = WebSettings.LOAD_NO_CACHE
-                        allowFileAccess = false
-                        databaseEnabled = false
-                        // Desktop User Agent for better sniffing/less tracking
-                        userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-                    }
-
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = false
+                    settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                    settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36"
+                    
                     webViewClient = object : WebViewClient() {
-                        // SNIFFER: Detects media inside IFRAMES by watching network requests
-                        override fun shouldInterceptRequest(
-                            view: WebView?,
-                            request: WebResourceRequest?
-                        ): WebResourceResponse? {
+                        override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                             val url = request?.url.toString()
-                            if (url.contains(".mp4") || url.contains(".m3u8") || url.contains("video")) {
-                                // Log found media for downloading
-                                println("GhostSniffer detected: $url")
+                            if (url.contains(".mp4") || url.contains(".m3u8")) {
+                                // Logic for detected media
                             }
                             return super.shouldInterceptRequest(view, request)
                         }
                     }
 
-                    // LONG CLICK MEDIA DOWNLOADER
                     setOnLongClickListener {
                         val result = hitTestResult
-                        val mediaUrl = result.extra
-                        if (mediaUrl != null && (result.type == WebView.HitTestResult.IMAGE_TYPE || 
-                            result.type == WebView.HitTestResult.SRC_ANCHOR_TYPE)) {
-                            executeDownload(context, mediaUrl)
-                        }
+                        result.extra?.let { executeDownload(context, it) }
                         true
                     }
-
                     loadUrl(urlInput)
                 }
             }
@@ -155,21 +128,10 @@ fun GhostBrowserUI() {
     }
 }
 
-// --- SECURE DOWNLOADER ---
 fun executeDownload(context: Context, url: String) {
-    try {
-        val request = DownloadManager.Request(Uri.parse(url))
-            .setTitle("Ghost Download")
-            .setDescription("Securely downloading media...")
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "GhostMedia_${System.currentTimeMillis()}")
-            .setAllowedOverMetered(true)
-            .setAllowedOverRoaming(true)
-
-        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        dm.enqueue(request)
-        Toast.makeText(context, "Download Started", Toast.LENGTH_SHORT).show()
-    } catch (e: Exception) {
-        Toast.makeText(context, "Download Failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-    }
+    val request = DownloadManager.Request(Uri.parse(url))
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "Ghost_${System.currentTimeMillis()}")
+    (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+    Toast.makeText(context, "Ghost Download Started", Toast.LENGTH_SHORT).show()
 }
