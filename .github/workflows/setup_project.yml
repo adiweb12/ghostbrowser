@@ -18,6 +18,7 @@ jobs:
         run: |
           mkdir -p app/src/main/java/com/example/kotlinbrowser
           mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/mipmap-mdpi
           
           # Clean hidden characters and move files
           sed -i 's/\r$//' MainActivity.kt || true
@@ -25,9 +26,30 @@ jobs:
           cp MainActivity.kt app/src/main/java/com/example/kotlinbrowser/MainActivity.kt || true
           cp AndroidManifest.xml app/src/main/AndroidManifest.xml || true
 
-      - name: Generate Gradle Properties (The Fix)
+      - name: Generate Missing Resources (The Fix)
         run: |
-          # This enables AndroidX and Jetifier which was causing your error
+          # 1. Create a basic Theme to satisfy the Manifest
+          cat <<EOF > app/src/main/res/values/themes.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.Material3.DayNight.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar" />
+          </resources>
+          EOF
+
+          # 2. Create a placeholder icon so the build doesn't fail
+          # This creates a simple XML vector icon named ic_launcher.xml
+          mkdir -p app/src/main/res/drawable
+          cat <<EOF > app/src/main/res/drawable/ic_launcher_background.xml
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" width="108dp" height="108dp" viewportWidth="108" viewportHeight="108"><path android:fillColor="#3DDC84" android:pathData="M0,0h108v108h-108z"/></vector>
+          EOF
+          
+          # We update the Manifest path to use a generic round icon if needed, 
+          # but usually, just having the style fixed is enough.
+          # We'll create a dummy mipmap folder just in case.
+          cp app/src/main/res/drawable/ic_launcher_background.xml app/src/main/res/mipmap-mdpi/ic_launcher.xml
+
+      - name: Generate Gradle Properties
+        run: |
           echo "android.useAndroidX=true" > gradle.properties
           echo "android.enableJetifier=true" >> gradle.properties
           echo "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8" >> gradle.properties
