@@ -23,7 +23,6 @@ jobs:
 
       - name: Generate Gradle Configuration
         run: |
-          # 1. Create settings.gradle.kts with Repositories defined
           cat <<EOF > settings.gradle.kts
           pluginManagement {
               repositories {
@@ -43,7 +42,6 @@ jobs:
           include(":app")
           EOF
 
-          # 2. Create Root build.gradle.kts
           cat <<EOF > build.gradle.kts
           plugins {
               id("com.android.application") version "8.2.2" apply false
@@ -51,7 +49,6 @@ jobs:
           }
           EOF
 
-          # 3. Create App build.gradle.kts
           cat <<EOF > app/build.gradle.kts
           plugins {
               id("com.android.application")
@@ -59,11 +56,11 @@ jobs:
           }
           android {
               namespace = "com.example.kotlinbrowser"
-              compileSdk = 35
+              compileSdk = 34
               defaultConfig {
                   applicationId = "com.example.kotlinbrowser"
                   minSdk = 24
-                  targetSdk = 35
+                  targetSdk = 34
                   versionCode = 1
                   versionName = "1.0"
               }
@@ -72,22 +69,25 @@ jobs:
               kotlinOptions { jvmTarget = "17" }
           }
           dependencies {
-              implementation("androidx.activity:activity-compose:1.9.2")
-              implementation(platform("androidx.compose:compose-bom:2024.02.01"))
+              implementation("androidx.activity:activity-compose:1.8.2")
+              implementation(platform("androidx.compose:compose-bom:2023.10.01"))
               implementation("androidx.compose.ui:ui")
               implementation("androidx.compose.material3:material3")
-              implementation("androidx.webkit:webkit:1.12.0")
+              implementation("androidx.webkit:webkit:1.10.0")
           }
           EOF
 
-      - name: Force Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.5
+      - name: Force Install Stable Gradle 8.5
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+          unzip -q gradle-8.5-bin.zip
+          ./gradle-8.5/bin/gradle wrapper --gradle-version 8.5
 
       - name: Build Debug APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
-
+          ./gradlew assembleDebug --stacktrace
+          
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
