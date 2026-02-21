@@ -23,31 +23,44 @@ jobs:
           mkdir -p app/src/main/java/com/ghost/browser
           mkdir -p app/src/main/res/values
           
-          # Move your files
-          mv AndroidManifest.xml app/src/main/AndroidManifest.xml || true
+          # 1. Clean Manifest (Remove the legacy package attribute)
+          if [ -f AndroidManifest.xml ]; then
+            sed -i 's/package="com.ghost.browser"//g' AndroidManifest.xml
+            mv AndroidManifest.xml app/src/main/AndroidManifest.xml
+          fi
+
+          # 2. Move Kotlin Code
           mv MainActivity.kt app/src/main/java/com/ghost/browser/MainActivity.kt || true
 
-          # 1. ADD GRADLE PROPERTIES (Crucial Fix)
+          # 3. Create gradle.properties
           cat <<EOF > gradle.properties
           android.useAndroidX=true
           android.enableJetifier=true
           kotlin.code.style=official
+          org.gradle.jvmargs=-Xmx2048m
           EOF
 
-          # 2. Create settings.gradle.kts
+          # 4. Create settings.gradle.kts (Fixed Resolution Strategy)
           cat <<EOF > settings.gradle.kts
           pluginManagement {
-              repositories { google(); mavenCentral(); gradlePluginPortal() }
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
           }
           dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories { google(); mavenCentral() }
+              repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
           }
           rootProject.name = "GhostBrowser"
           include(":app")
           EOF
 
-          # 3. Create root build.gradle.kts
+          # 5. Create root build.gradle.kts
           cat <<EOF > build.gradle.kts
           plugins {
               id("com.android.application") version "8.2.2" apply false
@@ -55,7 +68,7 @@ jobs:
           }
           EOF
 
-          # 4. Create app/build.gradle.kts
+          # 6. Create app/build.gradle.kts
           cat <<EOF > app/build.gradle.kts
           plugins {
               id("com.android.application")
@@ -82,12 +95,13 @@ jobs:
               implementation(platform("androidx.compose:compose-bom:2024.02.00"))
               implementation("androidx.compose.ui:ui")
               implementation("androidx.compose.material:material")
-              implementation("androidx.compose.ui:ui-tooling-preview")
           }
           EOF
 
-      - name: Build APK
-        run: gradle assembleDebug
+      - name: Build with Gradle Wrapper
+        run: |
+          # We use 'gradle' which is pre-installed on the runner
+          gradle assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
