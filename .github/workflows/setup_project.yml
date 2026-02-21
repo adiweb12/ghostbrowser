@@ -33,7 +33,7 @@ jobs:
           # 2. Move Kotlin Code
           mv MainActivity.kt app/src/main/java/com/ghost/browser/MainActivity.kt || true
 
-          # 3. Create Resources (Colors & Theme)
+          # 3. Create Resources
           cat <<EOF > app/src/main/res/values/colors.xml
           <?xml version="1.0" encoding="utf-8"?><resources>
           <color name="purple_500">#FF6200EE</color>
@@ -53,16 +53,14 @@ jobs:
           </resources>
           EOF
 
-          # 4. CREATE THE MISSING ICON (Adaptive Icon)
+          # 4. Create Icon
           cat <<EOF > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           <?xml version="1.0" encoding="utf-8"?>
           <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
               <background android:drawable="@color/purple_500"/>
               <foreground>
                   <inset android:inset="25%">
-                      <shape android:shape="oval">
-                          <solid android:color="@color/white"/>
-                      </shape>
+                      <shape android:shape="oval"><solid android:color="@color/white"/></shape>
                   </inset>
               </foreground>
           </adaptive-icon>
@@ -103,6 +101,14 @@ jobs:
                   targetSdk 34
                   versionCode 1
                   versionName "1.0"
+              }
+              // FIX: Syncing Java and Kotlin versions
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = '17'
               }
               buildFeatures { compose true }
               composeOptions { kotlinCompilerExtensionVersion '1.4.3' }
