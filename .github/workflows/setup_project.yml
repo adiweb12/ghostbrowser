@@ -1,139 +1,79 @@
-name: Ghost Browser APK Generator
+name: Mobile-Friendly Android Build
 
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
+      - name: set up JDK 17
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: gradle
 
-      - name: Setup Project Structure
+      - name: Create Android Structure
         run: |
-          mkdir -p app/src/main/java/com/ghost/browser
+          mkdir -p app/src/main/java/com/example/kotlinbrowser
           mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/xml
-          mkdir -p app/src/main/res/mipmap-anydpi-v26
+          # Move your manual files to the correct spots
+          mv MainActivity.kt app/src/main/java/com/example/kotlinbrowser/
+          mv AndroidManifest.xml app/src/main/
 
-          mv MainActivity.kt app/src/main/java/com/ghost/browser/ || true
-          mv GhostVpnService.kt app/src/main/java/com/ghost/browser/ || true
+      - name: Generate Build Files (Gradle Edit)
+        run: |
+          # Create settings.gradle
+          echo "rootProject.name = 'KotlinBrowser'" > settings.gradle.kts
+          echo "include(':app')" >> settings.gradle.kts
 
-          if [ -f AndroidManifest.xml ]; then
-            sed -i 's/package="com.ghost.browser"//g' AndroidManifest.xml
-            mv AndroidManifest.xml app/src/main/AndroidManifest.xml
-          fi
-
-          cat <<EOF > app/src/main/res/xml/file_paths.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <paths>
-              <external-path name="external_files" path="." />
-              <external-public-path name="public_downloads" path="Download" />
-          </paths>
-          EOF
-
-          cat <<EOF > app/src/main/res/values/colors.xml
-          <?xml version="1.0" encoding="utf-8"?><resources>
-          <color name="purple_80">#D0BCFF</color>
-          <color name="black">#FF000000</color>
-          <color name="white">#FFFFFFFF</color>
-          </resources>
-          EOF
-          
-          cat <<EOF > app/src/main/res/values/themes.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <style name="Theme.Material3.DayNight.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar">
-                  <item name="android:statusBarColor">@android:color/transparent</item>
-                  <item name="android:navigationBarColor">@android:color/transparent</item>
-              </style>
-          </resources>
-          EOF
-
-          # CREATE BOTH STANDARD AND ROUND ICONS
-          cat <<EOF > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-              <background android:drawable="@color/black"/>
-              <foreground><inset android:inset="25%"><shape android:shape="oval"><solid android:color="@color/purple_80"/></shape></inset></foreground>
-          </adaptive-icon>
-          EOF
-
-          cp app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-
-          cat <<EOF > gradle.properties
-          org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          android.enableJetifier=true
-          EOF
-
-          cat <<EOF > settings.gradle
-          include ':app'
-          EOF
-
-          cat <<EOF > build.gradle
-          buildscript {
-              repositories { google(); mavenCentral() }
-              dependencies { 
-                  classpath 'com.android.tools.build:gradle:8.2.2'
-                  classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22'
-              }
+          # Create Root build.gradle
+          cat <<EOF > build.gradle.kts
+          plugins {
+              id("com.android.application") version "8.2.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.20" apply false
           }
-          allprojects { repositories { google(); mavenCentral() } }
           EOF
 
-          cat <<EOF > app/build.gradle
-          apply plugin: 'com.android.application'
-          apply plugin: 'kotlin-android'
+          # Create App build.gradle (with Compose & WebKit)
+          cat <<EOF > app/build.gradle.kts
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
           android {
-              namespace 'com.ghost.browser'
-              compileSdk 34
+              namespace = "com.example.kotlinbrowser"
+              compileSdk = 35
               defaultConfig {
-                  applicationId "com.ghost.browser"
-                  minSdk 26
-                  targetSdk 34
-                  versionCode 1
-                  versionName "1.0-Ghost"
+                  applicationId = "com.example.kotlinbrowser"
+                  minSdk = 24
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "1.0"
               }
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-              kotlinOptions { jvmTarget = '17' }
-              buildFeatures { compose true }
-              composeOptions { kotlinCompilerExtensionVersion '1.5.8' }
+              buildFeatures { compose = true }
+              composeOptions { kotlinCompilerExtensionVersion = "1.5.4" }
+              kotlinOptions { jvmTarget = "17" }
           }
           dependencies {
-              implementation 'androidx.core:core-ktx:1.12.0'
-              implementation 'androidx.activity:activity-compose:1.8.2'
-              implementation 'androidx.compose.ui:ui:1.6.1'
-              implementation 'androidx.compose.material3:material3:1.2.0'
-              implementation 'androidx.compose.material:material-icons-extended:1.6.1'
-              implementation 'com.google.android.material:material:1.11.0'
+              implementation("androidx.activity:activity-compose:1.9.2")
+              implementation(platform("androidx.compose:compose-bom:2024.02.01"))
+              implementation("androidx.compose.ui:ui")
+              implementation("androidx.compose.material3:material3")
+              implementation("androidx.webkit:webkit:1.12.0")
           }
           EOF
 
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@v3
-        with:
-          gradle-version: 8.6
+      - name: Setup Gradle Wrapper
+        run: gradle wrapper
 
-      - name: Build APK
-        env:
-          JAVA_OPTS: "-Xmx4096m"
-        run: gradle assembleDebug --no-daemon
-        
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ghost-browser-apk
+          name: browser-app
           path: app/build/outputs/apk/debug/app-debug.apk
