@@ -1,135 +1,107 @@
-package com.ghost.browser // Ensure this matches your folder structure
+package com.ghost.browser
 
 import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.net.VpnService
 import android.os.Bundle
 import android.os.Environment
 import android.webkit.*
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
 class MainActivity : ComponentActivity() {
+
+    private val vpnRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (it.resultCode == RESULT_OK) startService(Intent(this, GhostVpnService::class.java))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // PRIVACY: Wipe all traces from RAM/Disk on startup
-        clearBrowserData()
+        // GHOST MODE: Wipe all RAM/Cookies on launch
+        CookieManager.getInstance().removeAllCookies(null)
+        WebStorage.getInstance().deleteAllData()
 
         setContent {
-            MaterialTheme {
-                GhostBrowserScreen()
-            }
+            GhostBrowserApp(onVpnToggle = { prepareVpn() })
         }
     }
 
-    private fun clearBrowserData() {
-        CookieManager.getInstance().removeAllCookies(null)
-        WebStorage.getInstance().deleteAllData()
+    private fun prepareVpn() {
+        val intent = VpnService.prepare(this)
+        if (intent != null) vpnRequest.launch(intent)
+        else startService(Intent(this, GhostVpnService::class.java))
     }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun GhostBrowserScreen() {
-    var urlInput by remember { mutableStateOf("https://www.google.com") }
-    var currentUrl by remember { mutableStateOf("https://www.google.com") }
-    var webViewInstance: WebView? by remember { mutableStateOf(null) }
+fun GhostBrowserApp(onVpnToggle: () -> Unit) {
+    var urlInput by remember { mutableStateOf("https://google.com") }
+    val context = LocalContext.current
+    
+    // Remember WebView across recompositions
+    val webView = remember {
+        WebView(context).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = false // Memory only
+            settings.cacheMode = WebSettings.LOAD_NO_CACHE
+            // User-Agent Spoofing (Desktop Mode for better privacy)
+            settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                    val url = request?.url.toString()
+                    // MEDIA SNIFFER: Detects mp4/m3u8 even in iframes via network logs
+                    if (url.contains(".mp4") || url.contains(".m3u8")) {
+                        println("Ghost Sniffer Found Media: $url")
+                    }
+                    return super.shouldInterceptRequest(view, request)
+                }
+            }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // --- Custom UI Header ---
-        Row(modifier = Modifier.padding(8.dp)) {
-            TextField(
-                value = urlInput,
-                onValueChange = { urlInput = it },
-                modifier = Modifier.weight(1f),
-                colors = TextFieldDefaults.textFieldColors(backgroundColor = Color.LightGray)
-            )
-            Button(onClick = { currentUrl = formatUrl(urlInput) }) {
-                Text("Go")
+            setOnLongClickListener {
+                val result = hitTestResult
+                if (result.extra != null) {
+                    downloadFile(context, result.extra!!)
+                    Toast.makeText(context, "Downloading...", Toast.LENGTH_SHORT).show()
+                }
+                true
             }
         }
-
-        // --- The Stealth Engine ---
-        AndroidView(
-            modifier = Modifier.weight(1f),
-            factory = { context ->
-                WebView(context).apply {
-                    webViewInstance = this
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = false // No permanent storage
-                    settings.databaseEnabled = false
-                    
-                    webViewClient = object : WebViewClient() {
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            // Automatically inject the iFrame sniffer
-                            injectIframeSniffer(view)
-                        }
-                    }
-
-                    // LONG CLICK MEDIA DOWNLOADER
-                    setOnLongClickListener {
-                        val result = hitTestResult
-                        val downloadUrl = result.extra
-                        if (downloadUrl != null) {
-                            startDownload(context, downloadUrl)
-                            Toast.makeText(context, "Downloading Media...", Toast.LENGTH_SHORT).show()
-                        }
-                        true
-                    }
-
-                    loadUrl(currentUrl)
-                }
-            },
-            update = { it.loadUrl(currentUrl) }
-        )
     }
-}
 
-fun formatUrl(input: String): String {
-    return if (input.startsWith("http")) input else "https://www.google.com/search?q=$input"
-}
-
-// --- The JS Sniffer for Iframes & Hidden Videos ---
-fun injectIframeSniffer(view: WebView?) {
-    val snifferScript = """
-        (function() {
-            let media = [];
-            // Scan Main DOM
-            document.querySelectorAll('video, source, a[href$=".mp4"]').forEach(el => media.push(el.src || el.href));
-            
-            // Scan iFrames (X-Frame bypass attempt)
-            let frames = document.getElementsByTagName('iframe');
-            for (let i = 0; i < frames.size; i++) {
-                try {
-                    let frameDocs = frames[i].contentDocument.querySelectorAll('video');
-                    frameDocs.forEach(v => media.push(v.src));
-                } catch(e) { console.log("Frame blocked by policy"); }
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextField(value = urlInput, onValueChange = { urlInput = it }, Modifier.weight(1f))
+            Button(onClick = { webView.loadUrl(if(urlInput.contains(".")) urlInput else "https://google.com/search?q=$urlInput") }) {
+                Text("Go")
             }
-            return media;
-        })();
-    """.trimIndent()
-    view?.evaluateJavascript(snifferScript) { results ->
-        // Results contains the list of found media URLs
+            IconButton(onClick = onVpnToggle) {
+                Text("VPN", color = Color.Red)
+            }
+        }
+        AndroidView(factory = { webView }, modifier = Modifier.weight(1f))
     }
 }
 
-fun startDownload(context: Context, url: String) {
+fun downloadFile(context: Context, url: String) {
     val request = DownloadManager.Request(Uri.parse(url))
-        .setTitle("Ghost Download")
-        .setDescription("Downloading file from browser")
         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "GhostMedia_${System.currentTimeMillis()}")
-    
-    val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    manager.enqueue(request)
+        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "Ghost_${System.currentTimeMillis()}.mp4")
+    (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
 }
