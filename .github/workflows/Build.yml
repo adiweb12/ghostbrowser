@@ -79,6 +79,7 @@ jobs:
       run: |
         [ -f "MainActivity.kt" ] && mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
         [ -f "GhostBrowserService.kt" ] && mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
+                [ -f "Privacy.kt" ] && mv Privacykt app/src/main/java/com/example/ghostbrowser/
         echo "Kotlin files moved."
 
     - name: Generate Build Scripts
