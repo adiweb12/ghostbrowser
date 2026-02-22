@@ -54,8 +54,53 @@ fun BrowserScreen() {
     var isLoading by remember { mutableStateOf(false) }
     var loadProgress by remember { mutableFloatStateOf(0f) }
     
+    // Download Dialog States
+    var showDownloadDialog by remember { mutableStateOf(false) }
+    var showQualityDialog by remember { mutableStateOf(false) }
+    var pendingDownloadUrl by remember { mutableStateOf("") }
+
     val focusManager = LocalFocusManager.current
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+
+    // --- DOWNLOAD CONFIRMATION DIALOG ---
+    if (showDownloadDialog) {
+        AlertDialog(
+            onDismissRequest = { showDownloadDialog = false },
+            title = { Text("Download Detected") },
+            text = { Text("A video or file was found. Do you want to download it?") },
+            confirmButton = {
+                Button(onClick = { 
+                    showDownloadDialog = false
+                    showQualityDialog = true 
+                }) { Text("Yes") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDownloadDialog = false }) { Text("No") }
+            }
+        )
+    }
+
+    // --- QUALITY SELECTION DIALOG ---
+    if (showQualityDialog) {
+        AlertDialog(
+            onDismissRequest = { showQualityDialog = false },
+            title = { Text("Select Quality") },
+            text = {
+                Column {
+                    listOf("1080p (Full HD)", "720p (HD)", "480p (SD)").forEach { quality ->
+                        DropdownMenuItem(
+                            text = { Text(quality) },
+                            onClick = {
+                                downloadFile(context, pendingDownloadUrl, null, null)
+                                showQualityDialog = false
+                            }
+                        )
+                    }
+                }
+            },
+            confirmButton = {}
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -72,7 +117,7 @@ fun BrowserScreen() {
                                     context.stopService(Intent(context, GhostVpnService::class.java))
                                 } else {
                                     val vpnIntent = VpnService.prepare(context)
-                                    if (vpnIntent != null) (context as ComponentActivity).startActivityForResult(vpnIntent, 0)
+                                    if (vpnIntent != null) (context as MainActivity).startActivityForResult(vpnIntent, 0)
                                     else context.startService(Intent(context, GhostVpnService::class.java))
                                 }
                                 vpnEnabled = !vpnEnabled
@@ -129,7 +174,8 @@ fun BrowserScreen() {
                             @JavascriptInterface
                             fun onVideoFound(videoUrl: String) {
                                 (context as MainActivity).runOnUiThread {
-                                    Toast.makeText(context, "Video detected!", Toast.LENGTH_SHORT).show()
+                                    pendingDownloadUrl = videoUrl
+                                    showDownloadDialog = true
                                 }
                             }
                         }, "VideoDetector")
@@ -144,7 +190,7 @@ fun BrowserScreen() {
                                 view?.evaluateJavascript(
                                     "(function() { " +
                                     "  var vids = document.getElementsByTagName('video');" +
-                                    "  if(vids.length > 0) VideoDetector.onVideoFound(vids[0].src);" +
+                                    "  if(vids.length > 0 && vids[0].src) VideoDetector.onVideoFound(vids[0].src);" +
                                     "})();", null
                                 )
                             }
@@ -156,21 +202,22 @@ fun BrowserScreen() {
                             }
                         }
 
-                        setDownloadListener { dUrl, userAgent, contentDisp, mime, _ ->
-                            downloadFile(ctx, dUrl, contentDisp, mime)
+                        setDownloadListener { dUrl, _, contentDisp, mime, _ ->
+                            pendingDownloadUrl = dUrl
+                            showDownloadDialog = true
                         }
 
                         setOnLongClickListener {
                             val result = hitTestResult
                             val type = result.type
-                            // Removed VIDEO_TYPE to fix compilation error
                             if (type == WebView.HitTestResult.IMAGE_TYPE || 
                                 type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE ||
                                 type == WebView.HitTestResult.SRC_ANCHOR_TYPE) {
                                 
                                 val mediaUrl = result.extra
                                 if (mediaUrl != null) {
-                                    downloadFile(ctx, mediaUrl, null, null)
+                                    pendingDownloadUrl = mediaUrl
+                                    showDownloadDialog = true
                                     true
                                 } else false
                             } else false
@@ -194,7 +241,7 @@ private fun downloadFile(context: Context, url: String, contentDisp: String?, mi
         request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         dm.enqueue(request)
-        Toast.makeText(context, "Downloading: $fileName", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Download started...", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         Toast.makeText(context, "Download failed", Toast.LENGTH_SHORT).show()
     }
