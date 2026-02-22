@@ -1,4 +1,4 @@
-package com.example.ghostbrowser
+/*package com.example.ghostbrowser
 
 import android.webkit.CookieManager
 import android.webkit.WebSettings
@@ -27,3 +27,4 @@ object PrivacyManager {
         webView.clearFormData()
     }
 }
+*/
