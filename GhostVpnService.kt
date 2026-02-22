@@ -7,7 +7,6 @@ import android.webkit.CookieManager
 import android.webkit.WebStorage
 import java.lang.Thread
 
-// Consolidated PrivacyManager to prevent redeclaration errors
 object PrivacyManager {
     fun nukeSession() {
         CookieManager.getInstance().removeAllCookies(null)
