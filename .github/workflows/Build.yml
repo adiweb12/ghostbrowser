@@ -30,7 +30,6 @@ jobs:
 
     - name: Generate AndroidManifest & Resources
       run: |
-        # Creating the Manifest with all required VPN and Storage permissions
         cat <<EOF > app/src/main/AndroidManifest.xml
         <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -80,12 +79,10 @@ jobs:
 
     - name: Move Manual Kotlin Files
       run: |
-        # This moves the files you added manually to the repository 
-        # from the root folder to the internal Android project structure
-        mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/ 2>/dev/null || true
-        mv GhostVpnService.kt app/src/main/java/com/example/ghostbrowser/ 2>/dev/null || true
-        mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/ 2>/dev/null || true
-        echo "Kotlin files moved to package directory."
+        # Moving files from root to the package folder
+        # We use 'find' to avoid errors if files are missing or already moved
+        find . -maxdepth 1 -name "*.kt" -exec mv {} app/src/main/java/com/example/ghostbrowser/ \;
+        echo "Kotlin files organized."
 
     - name: Setup Build Scripts
       run: |
@@ -130,10 +127,10 @@ jobs:
         EOF
 
     - name: Build APK
-      run: ./gradlew assembleDebug
+      run: gradle assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: GhostBrowser-Custom-Build
+        name: GhostBrowser-Build
         path: app/build/outputs/apk/debug/app-debug.apk
