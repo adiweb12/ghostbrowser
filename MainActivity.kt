@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable // FIXED: Missing import
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,42 +49,41 @@ fun BrowserScreen() {
     var pendingDownloadUrl by remember { mutableStateOf("") }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
 
-    // --- CLIPBOARD LISTENER (For YouTube/Copy Link) ---
+    // --- CLIPBOARD LISTENER ---
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     DisposableEffect(Unit) {
         val listener = ClipboardManager.OnPrimaryClipChangedListener {
-            val item = clipboard.primaryClip?.getItemAt(0)?.text.toString()
-            if (item.contains("youtube.com") || item.contains("youtu.be") || item.endsWith(".mp4")) {
-                pendingDownloadUrl = item
-                showQualityDialog = true
+            val clipData = clipboard.primaryClip
+            if (clipData != null && clipData.itemCount > 0) {
+                val item = clipData.getItemAt(0).text.toString()
+                if (item.startsWith("http") && (item.contains("youtube") || item.contains("youtu.be") || item.contains("fb.watch"))) {
+                    pendingDownloadUrl = item
+                    showQualityDialog = true
+                }
             }
         }
         clipboard.addPrimaryClipChangedListener(listener)
         onDispose { clipboard.removePrimaryClipChangedListener(listener) }
     }
 
-    // --- QUALITY & SIZE DIALOG ---
+    // --- QUALITY DIALOG ---
     if (showQualityDialog) {
         AlertDialog(
             onDismissRequest = { showQualityDialog = false },
             title = { Text("Download Media") },
             text = {
                 Column {
-                    Text("Select quality (Estimated size):", style = MaterialTheme.typography.bodySmall)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
                     val options = listOf(
-                        "1080p" to "120 MB",
-                        "720p" to "65 MB",
-                        "480p" to "30 MB"
+                        Triple("1080p", "120 MB", Color(0xFFBB86FC)),
+                        Triple("720p", "65 MB", Color(0xFF03DAC6)),
+                        Triple("480p", "30 MB", Color.Gray)
                     )
-                    
-                    options.forEach { (res, size) ->
+                    options.forEach { (res, size, color) ->
                         ListItem(
-                            headlineContent = { Text(res) },
+                            headlineContent = { Text(res, color = color) },
                             supportingContent = { Text(size) },
-                            leadingContent = { Icon(Icons.Default.VideoLibrary, null) },
-                            modifier = androidx.compose.foundation.clickable {
+                            leadingContent = { Icon(Icons.Default.PlayCircle, null, tint = color) },
+                            modifier = Modifier.clickable {
                                 downloadFile(context, pendingDownloadUrl)
                                 showQualityDialog = false
                             }
@@ -100,13 +100,15 @@ fun BrowserScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ghost Browser") },
+                title = { Text("Ghost Browser", style = MaterialTheme.typography.titleMedium) },
                 actions = {
                     IconButton(onClick = {
                         PrivacyManager.nukeSession()
                         (context as MainActivity).finishAndRemoveTask()
                         exitProcess(0)
-                    }) { Icon(Icons.Default.ExitToApp, null, tint = Color.Red) }
+                    }) {
+                        Icon(Icons.Default.ExitToApp, "Exit", tint = Color(0xFFCF6679))
+                    }
                 }
             )
         }
@@ -115,27 +117,24 @@ fun BrowserScreen() {
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = false
-                        
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = false
+                            // Spoof as Desktop to get direct stream links easier
+                            userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        }
                         webViewClient = WebViewClient()
-                        
-                        // --- LONG CLICK DETECTION ---
                         setOnLongClickListener {
                             val result = hitTestResult
-                            // If user long clicks a link or image/video source
                             if (result.type == WebView.HitTestResult.SRC_ANCHOR_TYPE || 
                                 result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
-                                
-                                val mediaUrl = result.extra
-                                if (mediaUrl != null) {
-                                    pendingDownloadUrl = mediaUrl
+                                pendingDownloadUrl = result.extra ?: ""
+                                if (pendingDownloadUrl.isNotEmpty()) {
                                     showQualityDialog = true
                                     true
                                 } else false
                             } else false
                         }
-                        
                         loadUrl(url)
                         webViewInstance = this
                     }
@@ -149,19 +148,19 @@ fun BrowserScreen() {
 private fun downloadFile(context: Context, url: String) {
     try {
         val request = DownloadManager.Request(Uri.parse(url))
-        val fileName = "Ghost_Download_${System.currentTimeMillis()}.mp4"
-        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+        val fileName = "Ghost_${System.currentTimeMillis()}.mp4"
         
-        // If it's a YouTube link, we notify the user it's passing through the ghost tunnel
-        if (url.contains("youtube")) {
-            Toast.makeText(context, "Processing YouTube Stream...", Toast.LENGTH_SHORT).show()
+        request.apply {
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+            // Add Headers to mimic a real browser to bypass YouTube/FB blocks
+            addRequestHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36")
         }
 
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         dm.enqueue(request)
-        Toast.makeText(context, "Download Started", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Ghost Downloader Started", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
-        Toast.makeText(context, "Error: Invalid Link", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Error: Secure link required", Toast.LENGTH_SHORT).show()
     }
 }
