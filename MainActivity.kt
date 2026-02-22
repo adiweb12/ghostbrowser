@@ -35,7 +35,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                BrowserScreen()
+                Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF121212)) {
+                    BrowserScreen()
+                }
             }
         }
     }
@@ -53,7 +55,7 @@ fun BrowserScreen() {
     var loadProgress by remember { mutableFloatStateOf(0f) }
     
     val focusManager = LocalFocusManager.current
-    var webViewInstance: WebView? by remember { mutableStateOf(null) }
+    var webViewInstance by remember { mutableStateOf<WebView?>(null) }
 
     Scaffold(
         topBar = {
@@ -70,7 +72,7 @@ fun BrowserScreen() {
                                     context.stopService(Intent(context, GhostVpnService::class.java))
                                 } else {
                                     val vpnIntent = VpnService.prepare(context)
-                                    if (vpnIntent != null) (context as MainActivity).startActivityForResult(vpnIntent, 0)
+                                    if (vpnIntent != null) (context as ComponentActivity).startActivityForResult(vpnIntent, 0)
                                     else context.startService(Intent(context, GhostVpnService::class.java))
                                 }
                                 vpnEnabled = !vpnEnabled
@@ -89,7 +91,7 @@ fun BrowserScreen() {
                             onClick = {
                                 context.stopService(Intent(context, GhostVpnService::class.java))
                                 PrivacyManager.nukeSession()
-                                (context as MainActivity).finishAndRemoveTask()
+                                (context as ComponentActivity).finishAndRemoveTask()
                                 exitProcess(0)
                             }
                         )
@@ -118,14 +120,18 @@ fun BrowserScreen() {
             )
 
             if (isLoading) {
-                LinearProgressIndicator(progress = { loadProgress }, modifier = Modifier.fillMaxWidth())
+                LinearProgressIndicator(
+                    progress = loadProgress,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
 
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
                         settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = false // Privacy
+                        settings.domStorageEnabled = false
                         
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, u: String?, fav: android.graphics.Bitmap?) {
@@ -158,10 +164,9 @@ fun BrowserScreen() {
                             if (result.type == WebView.HitTestResult.IMAGE_TYPE || result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
                                 val mediaUrl = result.extra
                                 if (mediaUrl != null) {
-                                    // Custom logic to trigger download on long press
                                     val request = DownloadManager.Request(Uri.parse(mediaUrl))
                                     request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "ghost_media_${System.currentTimeMillis()}")
+                                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "ghost_${System.currentTimeMillis()}")
                                     val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                                     dm.enqueue(request)
                                     Toast.makeText(ctx, "Saving media...", Toast.LENGTH_SHORT).show()
@@ -169,7 +174,6 @@ fun BrowserScreen() {
                                 true
                             } else false
                         }
-
                         loadUrl(url)
                         webViewInstance = this
                     }
