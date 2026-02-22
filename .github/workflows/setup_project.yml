@@ -17,7 +17,6 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        # Cache is disabled here because files are generated later in the script
         cache: '' 
 
     - name: Generate Project Structure & Resources
@@ -25,28 +24,9 @@ jobs:
         # 1. Create Folder Hierarchy
         mkdir -p app/src/main/java/com/example/ghostbrowser
         mkdir -p app/src/main/res/values
-        mkdir -p app/src/main/res/mipmap-mdpi
+        mkdir -p app/src/main/AndroidManifest.xml
 
-        # 2. Create Themes and Colors (Required for Material3)
-        cat <<EOF > app/src/main/res/values/colors.xml
-        <?xml version="1.0" encoding="utf-8"?>
-        <resources>
-            <color name="purple_500">#FF6200EE</color>
-            <color name="purple_700">#FF3700B3</color>
-            <color name="teal_200">#FF03DAC5</color>
-        </resources>
-        EOF
-
-        cat <<EOF > app/src/main/res/values/themes.xml
-        <?xml version="1.0" encoding="utf-8"?>
-        <resources>
-            <style name="Theme.Material3.DayNight.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar">
-                <item name="colorPrimary">@color/purple_500</item>
-            </style>
-        </resources>
-        EOF
-
-        # 3. Create the Manifest
+        # 2. Create the Manifest (Updated with Special Use permission)
         cat <<EOF > app/src/main/AndroidManifest.xml
         <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -81,7 +61,33 @@ jobs:
         </manifest>
         EOF
 
-    - name: Setup Build Files
+        # 3. Create necessary Material3 resources
+        cat <<EOF > app/src/main/res/values/colors.xml
+        <?xml version="1.0" encoding="utf-8"?>
+        <resources>
+            <color name="purple_500">#FF6200EE</color>
+        </resources>
+        EOF
+
+        cat <<EOF > app/src/main/res/values/themes.xml
+        <?xml version="1.0" encoding="utf-8"?>
+        <resources>
+            <style name="Theme.Material3.DayNight.NoActionBar" parent="android:Theme.Material.NoActionBar" />
+        </resources>
+        EOF
+
+    - name: Auto-Arrange Kotlin Files
+      run: |
+        # This moves any .kt files from your root folder into the correct package folder
+        if [ -f "MainActivity.kt" ]; then
+          mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
+        fi
+        
+        if [ -f "GhostBrowserService.kt" ]; then
+          mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
+        fi
+
+    - name: Setup Gradle Files
       run: |
         echo "include ':app'" > settings.gradle
 
@@ -122,7 +128,6 @@ jobs:
             implementation platform('androidx.compose:compose-bom:2023.08.00')
             implementation 'androidx.compose.ui:ui'
             implementation 'androidx.compose.material3:material3'
-            implementation 'androidx.compose.ui:ui-tooling-preview'
         }
         EOF
 
@@ -132,7 +137,7 @@ jobs:
         chmod +x gradlew
         ./gradlew assembleDebug
 
-    - name: Upload Artifact
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: GhostBrowser-APK
