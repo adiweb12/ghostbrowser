@@ -3,7 +3,18 @@ package com.example.ghostbrowser
 import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
+import android.webkit.CookieManager
+import android.webkit.WebStorage
 import java.lang.Thread
+
+// Consolidated PrivacyManager to prevent redeclaration errors
+object PrivacyManager {
+    fun nukeSession() {
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
+        WebStorage.getInstance().deleteAllData()
+    }
+}
 
 class GhostVpnService : VpnService(), Runnable {
     private var vpnThread: Thread? = null
