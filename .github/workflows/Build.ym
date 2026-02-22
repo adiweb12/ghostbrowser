@@ -25,53 +25,42 @@ jobs:
 
     - name: Initialize Project Structure & Files
       run: |
-        # 1. Clean and Create Folders
         rm -rf app
         mkdir -p app/src/main/java/com/example/ghostbrowser
         mkdir -p app/src/main/res/values
 
-        # 2. Create gradle.properties
         cat <<EOF > gradle.properties
         android.useAndroidX=true
         android.enableJetifier=true
         org.gradle.jvmargs=-Xmx2048m
         EOF
 
-        # 3. Create the Android Manifest (Removed package attr + Fixed Icon)
+        # Updated Manifest to match your new version (Fixed Icon for build)
         cat <<EOF > app/src/main/AndroidManifest.xml
         <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
             <uses-permission android:name="android.permission.INTERNET" />
-            <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-            <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-
+            <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
             <application
                 android:allowBackup="true"
+                android:hardwareAccelerated="true" 
                 android:icon="@android:drawable/ic_menu_search"
                 android:label="Ghost Browser"
                 android:theme="@style/Theme.Material3.DayNight.NoActionBar">
-                
                 <activity
                     android:name=".MainActivity"
                     android:exported="true"
-                    android:configChanges="orientation|screenSize">
+                    android:windowSoftInputMode="adjustResize">
                     <intent-filter>
                         <action android:name="android.intent.action.MAIN" />
                         <category android:name="android.intent.category.LAUNCHER" />
                     </intent-filter>
                 </activity>
-
-                <service
-                    android:name=".GhostBrowserService"
-                    android:enabled="true"
-                    android:exported="false"
-                    android:foregroundServiceType="specialUse" />
+                <service android:name=".GhostBrowserService" android:exported="false" />
             </application>
         </manifest>
         EOF
 
-        # 4. Create Material3 resources
         cat <<EOF > app/src/main/res/values/colors.xml
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
@@ -90,7 +79,7 @@ jobs:
       run: |
         [ -f "MainActivity.kt" ] && mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
         [ -f "GhostBrowserService.kt" ] && mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
-        echo "Kotlin files moved to app/src/main/java/com/example/ghostbrowser/"
+        echo "Kotlin files moved."
 
     - name: Generate Build Scripts
       run: |
@@ -120,7 +109,7 @@ jobs:
                 minSdk 26
                 targetSdk 34
                 versionCode 1
-                versionName "1.0"
+                versionName "2.0"
             }
             buildFeatures { compose true }
             composeOptions { kotlinCompilerExtensionVersion '1.5.1' }
@@ -133,6 +122,7 @@ jobs:
             implementation platform('androidx.compose:compose-bom:2023.08.00')
             implementation 'androidx.compose.ui:ui'
             implementation 'androidx.compose.material3:material3'
+            implementation 'androidx.compose.material:material-icons-extended'
         }
         EOF
 
@@ -142,5 +132,5 @@ jobs:
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: GhostBrowser-APK
+        name: GhostBrowser-v2-APK
         path: app/build/outputs/apk/debug/app-debug.apk
