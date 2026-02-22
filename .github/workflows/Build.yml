@@ -23,39 +23,49 @@ jobs:
       with:
         gradle-version: 8.5
 
-    - name: Initialize Project Structure
+    - name: Initialize Folders
       run: |
-        rm -rf app
         mkdir -p app/src/main/java/com/example/ghostbrowser
         mkdir -p app/src/main/res/values
 
-        cat <<EOF > gradle.properties
-        android.useAndroidX=true
-        android.enableJetifier=true
-        org.gradle.jvmargs=-Xmx2048m
-        EOF
-
+    - name: Generate AndroidManifest & Resources
+      run: |
+        # Creating the Manifest with all required VPN and Storage permissions
         cat <<EOF > app/src/main/AndroidManifest.xml
         <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android">
             <uses-permission android:name="android.permission.INTERNET" />
             <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
             <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+            <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+            <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
             <application
-                android:allowBackup="true"
+                android:allowBackup="false"
                 android:hardwareAccelerated="true" 
                 android:icon="@android:drawable/ic_menu_search"
                 android:label="Ghost Browser"
                 android:theme="@style/Theme.Material3.DayNight.NoActionBar">
-                <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
+                
+                <activity
+                    android:name=".MainActivity"
+                    android:exported="true"
+                    android:windowSoftInputMode="adjustResize">
                     <intent-filter>
                         <action android:name="android.intent.action.MAIN" />
                         <category android:name="android.intent.category.LAUNCHER" />
                     </intent-filter>
                 </activity>
-                <service android:name=".GhostVpnService" android:permission="android.permission.BIND_VPN_SERVICE" android:exported="false">
-                    <intent-filter><action android:name="android.net.VpnService" /></intent-filter>
+
+                <service
+                    android:name=".GhostVpnService"
+                    android:permission="android.permission.BIND_VPN_SERVICE"
+                    android:exported="false">
+                    <intent-filter>
+                        <action android:name="android.net.VpnService" />
+                    </intent-filter>
                 </service>
+
                 <service android:name=".GhostBrowserService" android:exported="false" />
             </application>
         </manifest>
@@ -68,119 +78,19 @@ jobs:
         </resources>
         EOF
 
-    - name: Generate Clean Source Code
+    - name: Move Manual Kotlin Files
       run: |
-        # Instead of moving files, we create the source directly to ensure zero syntax errors
-        cat <<EOF > app/src/main/java/com/example/ghostbrowser/MainActivity.kt
-        package com.example.ghostbrowser
-        import android.content.Intent
-        import android.net.VpnService
-        import android.os.Bundle
-        import android.webkit.*
-        import androidx.activity.ComponentActivity
-        import androidx.activity.compose.setContent
-        import androidx.activity.enableEdgeToEdge
-        import androidx.compose.foundation.layout.*
-        import androidx.compose.material.icons.Icons
-        import androidx.compose.material.icons.filled.*
-        import androidx.compose.material3.*
-        import androidx.compose.runtime.*
-        import androidx.compose.ui.Modifier
-        import androidx.compose.ui.graphics.Color
-        import androidx.compose.ui.unit.dp
-        import androidx.compose.ui.viewinterop.AndroidView
+        # This moves the files you added manually to the repository 
+        # from the root folder to the internal Android project structure
+        mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/ 2>/dev/null || true
+        mv GhostVpnService.kt app/src/main/java/com/example/ghostbrowser/ 2>/dev/null || true
+        mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/ 2>/dev/null || true
+        echo "Kotlin files moved to package directory."
 
-        class MainActivity : ComponentActivity() {
-            override fun onCreate(savedInstanceState: Bundle?) {
-                super.onCreate(savedInstanceState)
-                enableEdgeToEdge()
-                setContent {
-                    MaterialTheme(colorScheme = darkColorScheme()) {
-                        BrowserWithVpn(onStartVpn = { 
-                            val intent = VpnService.prepare(this)
-                            if (intent != null) startActivityForResult(intent, 0)
-                            else startService(Intent(this, GhostVpnService::class.java))
-                        })
-                    }
-                }
-            }
-            override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-                super.onActivityResult(requestCode, resultCode, data)
-                if (resultCode == RESULT_OK) startService(Intent(this, GhostVpnService::class.java))
-            }
-        }
-
-        @OptIn(ExperimentalMaterial3Api::class)
-        @Composable
-        fun BrowserWithVpn(onStartVpn: () -> Unit) {
-            var url by remember { mutableStateOf("https://www.google.com") }
-            var menuExpanded by remember { mutableStateOf(false) }
-            var vpnEnabled by remember { mutableStateOf(false) }
-            var progress by remember { mutableFloatStateOf(0f) }
-
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = { Text("Ghost Browser") },
-                        actions = {
-                            Icon(Icons.Default.Shield, null, tint = if (vpnEnabled) Color.Green else Color.Gray)
-                            IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, null) }
-                            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                                DropdownMenuItem(text = { Text("Enable VPN") }, onClick = { vpnEnabled = true; onStartVpn(); menuExpanded = false })
-                            }
-                        }
-                    )
-                }
-            ) { padding ->
-                Column(modifier = Modifier.padding(padding)) {
-                    if (progress > 0f && progress < 1f) {
-                        LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth().height(2.dp))
-                    }
-                    AndroidView(
-                        factory = { context ->
-                            WebView(context).apply {
-                                settings.javaScriptEnabled = true
-                                webViewClient = WebViewClient()
-                                webChromeClient = object : WebChromeClient() {
-                                    override fun onProgressChanged(view: WebView?, newP: Int) { progress = newP / 100f }
-                                }
-                                loadUrl(url)
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-        }
-        EOF
-
-        # Generate the VPN Service File
-        cat <<EOF > app/src/main/java/com/example/ghostbrowser/GhostVpnService.kt
-        package com.example.ghostbrowser
-        import android.net.VpnService
-        import android.os.ParcelFileDescriptor
-        import android.content.Intent
-        class GhostVpnService : VpnService() {
-            private var vpnInterface: ParcelFileDescriptor? = null
-            override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-                val builder = Builder()
-                builder.setSession("GhostVPN").addAddress("10.0.0.1", 24).addDnsServer("8.8.8.8").addRoute("0.0.0.0", 0)
-                vpnInterface = builder.establish()
-                return START_STICKY
-            }
-            override fun onDestroy() { vpnInterface?.close(); super.onDestroy() }
-        }
-        EOF
-
-        # Create a dummy Privacy file to prevent Unresolved Reference errors
-        cat <<EOF > app/src/main/java/com/example/ghostbrowser/Privacy.kt
-        package com.example.ghostbrowser
-        object PrivacyManager { fun nukeSession() { /* Logic here */ } }
-        EOF
-
-    - name: Generate Build Scripts
+    - name: Setup Build Scripts
       run: |
         echo "include ':app'" > settings.gradle
+        
         cat <<EOF > build.gradle
         buildscript {
             repositories { google(); mavenCentral() }
@@ -197,7 +107,13 @@ jobs:
         android {
             namespace 'com.example.ghostbrowser'
             compileSdk 34
-            defaultConfig { applicationId "com.example.ghostbrowser"; minSdk 26; targetSdk 34; versionCode 1; versionName "3.0" }
+            defaultConfig {
+                applicationId "com.example.ghostbrowser"
+                minSdk 26
+                targetSdk 34
+                versionCode 1
+                versionName "2.5-VPN-PRO"
+            }
             buildFeatures { compose true }
             composeOptions { kotlinCompilerExtensionVersion '1.5.1' }
             compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
@@ -214,10 +130,10 @@ jobs:
         EOF
 
     - name: Build APK
-      run: gradle assembleDebug
+      run: ./gradlew assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: GhostBrowser-Complete
+        name: GhostBrowser-Custom-Build
         path: app/build/outputs/apk/debug/app-debug.apk
