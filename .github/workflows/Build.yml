@@ -70,20 +70,25 @@ jobs:
 
     - name: Move and Patch Kotlin Files
       run: |
-        # Move files
+        # Move files to package folder
         [ -f "MainActivity.kt" ] && mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
         [ -f "GhostBrowserService.kt" ] && mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
         [ -f "GhostVpnService.kt" ] && mv GhostVpnService.kt app/src/main/java/com/example/ghostbrowser/
         [ -f "Privacy.kt" ] && mv Privacy.kt app/src/main/java/com/example/ghostbrowser/
 
-        # FIX 1: Add missing Intent import to GhostVpnService
-        sed -i '2i import android.content.Intent' app/src/main/java/com/example/ghostbrowser/GhostVpnService.kt
+        # FIX 1: Ensure Intent import exists in GhostVpnService
+        if ! grep -q "import android.content.Intent" app/src/main/java/com/example/ghostbrowser/GhostVpnService.kt; then
+            sed -i '2i import android.content.Intent' app/src/main/java/com/example/ghostbrowser/GhostVpnService.kt
+        fi
 
-        # FIX 2: Fix LinearProgressIndicator syntax in MainActivity
-        # Changes: progress = { progress / 100f }  ->  progress = progress / 100f
-        sed -i 's/progress = { progress \/ 100f }/progress = progress \/ 100f/g' app/src/main/java/com/example/ghostbrowser/MainActivity.kt
+        # FIX 2: Correct the LinearProgressIndicator syntax in MainActivity
+        # We replace the entire multi-line block with a single-line correct version
+        sed -i 's/LinearProgressIndicator(/LinearProgressIndicator(progress = progress \/ 100f, modifier = Modifier.fillMaxWidth().height(2.dp), color = MaterialTheme.colorScheme.primary) \/\//g' app/src/main/java/com/example/ghostbrowser/MainActivity.kt
         
-        echo "Patches applied successfully."
+        # Cleanup the leftover lambda lines if they exist
+        sed -i '/progress = { progress \/ 100f }/d' app/src/main/java/com/example/ghostbrowser/MainActivity.kt
+
+        echo "Patches applied."
 
     - name: Generate Build Scripts
       run: |
@@ -112,7 +117,7 @@ jobs:
                 minSdk 26
                 targetSdk 34
                 versionCode 1
-                versionName "2.6-Patched"
+                versionName "2.7-Stable"
             }
             buildFeatures { compose true }
             composeOptions { kotlinCompilerExtensionVersion '1.5.1' }
@@ -132,8 +137,8 @@ jobs:
     - name: Build APK
       run: gradle assembleDebug
 
-    - name: Upload Patched APK
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: GhostBrowser-Final-Patched
+        name: GhostBrowser-Final
         path: app/build/outputs/apk/debug/app-debug.apk
