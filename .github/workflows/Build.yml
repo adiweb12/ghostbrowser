@@ -23,66 +23,42 @@ jobs:
       with:
         gradle-version: 8.5
 
-    - name: Initialize Project Structure & Files
+    - name: Initialize Project Structure
       run: |
-        # 1. Clean and Create Folders
         rm -rf app
         mkdir -p app/src/main/java/com/example/ghostbrowser
         mkdir -p app/src/main/res/values
 
-        # 2. Create gradle.properties
         cat <<EOF > gradle.properties
         android.useAndroidX=true
         android.enableJetifier=true
         org.gradle.jvmargs=-Xmx2048m
         EOF
 
-        # 3. Updated Manifest (Added VPN Service + Permissions)
         cat <<EOF > app/src/main/AndroidManifest.xml
         <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android">
             <uses-permission android:name="android.permission.INTERNET" />
             <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
             <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-
             <application
                 android:allowBackup="true"
                 android:hardwareAccelerated="true" 
                 android:icon="@android:drawable/ic_menu_search"
                 android:label="Ghost Browser"
                 android:theme="@style/Theme.Material3.DayNight.NoActionBar">
-                
-                <activity
-                    android:name=".MainActivity"
-                    android:exported="true"
-                    android:windowSoftInputMode="adjustResize">
+                <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
                     <intent-filter>
                         <action android:name="android.intent.action.MAIN" />
                         <category android:name="android.intent.category.LAUNCHER" />
                     </intent-filter>
                 </activity>
-
-                <service
-                    android:name=".GhostVpnService"
-                    android:permission="android.permission.BIND_VPN_SERVICE"
-                    android:exported="false">
-                    <intent-filter>
-                        <action android:name="android.net.VpnService" />
-                    </intent-filter>
+                <service android:name=".GhostVpnService" android:permission="android.permission.BIND_VPN_SERVICE" android:exported="false">
+                    <intent-filter><action android:name="android.net.VpnService" /></intent-filter>
                 </service>
-
                 <service android:name=".GhostBrowserService" android:exported="false" />
-
             </application>
         </manifest>
-        EOF
-
-        # 4. Standard Resources
-        cat <<EOF > app/src/main/res/values/colors.xml
-        <?xml version="1.0" encoding="utf-8"?>
-        <resources>
-            <color name="purple_500">#FF6200EE</color>
-        </resources>
         EOF
 
         cat <<EOF > app/src/main/res/values/themes.xml
@@ -92,19 +68,26 @@ jobs:
         </resources>
         EOF
 
-    - name: Move and Arrange All Kotlin Files
+    - name: Move and Patch Kotlin Files
       run: |
-        # Moving all core files to the package directory
+        # Move files
         [ -f "MainActivity.kt" ] && mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
         [ -f "GhostBrowserService.kt" ] && mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
         [ -f "GhostVpnService.kt" ] && mv GhostVpnService.kt app/src/main/java/com/example/ghostbrowser/
         [ -f "Privacy.kt" ] && mv Privacy.kt app/src/main/java/com/example/ghostbrowser/
-        echo "All files moved to com.example.ghostbrowser"
+
+        # FIX 1: Add missing Intent import to GhostVpnService
+        sed -i '2i import android.content.Intent' app/src/main/java/com/example/ghostbrowser/GhostVpnService.kt
+
+        # FIX 2: Fix LinearProgressIndicator syntax in MainActivity
+        # Changes: progress = { progress / 100f }  ->  progress = progress / 100f
+        sed -i 's/progress = { progress \/ 100f }/progress = progress \/ 100f/g' app/src/main/java/com/example/ghostbrowser/MainActivity.kt
+        
+        echo "Patches applied successfully."
 
     - name: Generate Build Scripts
       run: |
         echo "include ':app'" > settings.gradle
-
         cat <<EOF > build.gradle
         buildscript {
             repositories { google(); mavenCentral() }
@@ -126,10 +109,10 @@ jobs:
             compileSdk 34
             defaultConfig {
                 applicationId "com.example.ghostbrowser"
-                minSdk 25
+                minSdk 26
                 targetSdk 34
                 versionCode 1
-                versionName "2.5-VPN"
+                versionName "2.6-Patched"
             }
             buildFeatures { compose true }
             composeOptions { kotlinCompilerExtensionVersion '1.5.1' }
@@ -149,8 +132,8 @@ jobs:
     - name: Build APK
       run: gradle assembleDebug
 
-    - name: Upload VPN-Enabled APK
+    - name: Upload Patched APK
       uses: actions/upload-artifact@v4
       with:
-        name: GhostBrowser-VPN-Edition
+        name: GhostBrowser-Final-Patched
         path: app/build/outputs/apk/debug/app-debug.apk
