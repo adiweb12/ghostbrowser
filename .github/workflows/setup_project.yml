@@ -30,18 +30,17 @@ jobs:
         mkdir -p app/src/main/java/com/example/ghostbrowser
         mkdir -p app/src/main/res/values
 
-        # 2. Create gradle.properties (FIXES THE ANDROIDX ERROR)
+        # 2. Create gradle.properties
         cat <<EOF > gradle.properties
         android.useAndroidX=true
         android.enableJetifier=true
         org.gradle.jvmargs=-Xmx2048m
         EOF
 
-        # 3. Create the Android Manifest
+        # 3. Create the Android Manifest (Removed package attr + Fixed Icon)
         cat <<EOF > app/src/main/AndroidManifest.xml
         <?xml version="1.0" encoding="utf-8"?>
-        <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-            package="com.example.ghostbrowser">
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
             <uses-permission android:name="android.permission.INTERNET" />
             <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -49,7 +48,7 @@ jobs:
 
             <application
                 android:allowBackup="true"
-                android:icon="@android:drawable/ic_menu_browser"
+                android:icon="@android:drawable/ic_menu_search"
                 android:label="Ghost Browser"
                 android:theme="@style/Theme.Material3.DayNight.NoActionBar">
                 
@@ -89,22 +88,14 @@ jobs:
 
     - name: Move and Arrange Kotlin Files
       run: |
-        # Move Kotlin files from the main repo folder into the app package
-        if [ -f "MainActivity.kt" ]; then
-          mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
-          echo "Arranged MainActivity.kt"
-        fi
-        if [ -f "GhostBrowserService.kt" ]; then
-          mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
-          echo "Arranged GhostBrowserService.kt"
-        fi
+        [ -f "MainActivity.kt" ] && mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
+        [ -f "GhostBrowserService.kt" ] && mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
+        echo "Kotlin files moved to app/src/main/java/com/example/ghostbrowser/"
 
     - name: Generate Build Scripts
       run: |
-        # Root settings.gradle
         echo "include ':app'" > settings.gradle
 
-        # Root build.gradle
         cat <<EOF > build.gradle
         buildscript {
             repositories { google(); mavenCentral() }
@@ -116,7 +107,6 @@ jobs:
         allprojects { repositories { google(); mavenCentral() } }
         EOF
 
-        # App level build.gradle
         cat <<EOF > app/build.gradle
         plugins {
             id 'com.android.application'
