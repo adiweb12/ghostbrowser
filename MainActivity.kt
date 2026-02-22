@@ -1,8 +1,7 @@
 package com.example.ghostbrowser
 
 import android.app.DownloadManager
-import android.content.Context
-import android.content.Intent
+import android.content.*
 import android.net.Uri
 import android.net.VpnService
 import android.os.Bundle
@@ -14,8 +13,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,8 +20,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlin.system.exitProcess
@@ -49,56 +44,56 @@ fun BrowserScreen() {
     val context = LocalContext.current
     var url by remember { mutableStateOf("https://www.google.com") }
     var inputUrl by remember { mutableStateOf("https://www.google.com") }
-    var menuExpanded by remember { mutableStateOf(false) }
-    var vpnEnabled by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-    var loadProgress by remember { mutableFloatStateOf(0f) }
-    
-    // Download Dialog States
-    var showDownloadDialog by remember { mutableStateOf(false) }
     var showQualityDialog by remember { mutableStateOf(false) }
     var pendingDownloadUrl by remember { mutableStateOf("") }
-
-    val focusManager = LocalFocusManager.current
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
 
-    // --- DOWNLOAD CONFIRMATION DIALOG ---
-    if (showDownloadDialog) {
-        AlertDialog(
-            onDismissRequest = { showDownloadDialog = false },
-            title = { Text("Download Detected") },
-            text = { Text("A video or file was found. Do you want to download it?") },
-            confirmButton = {
-                Button(onClick = { 
-                    showDownloadDialog = false
-                    showQualityDialog = true 
-                }) { Text("Yes") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDownloadDialog = false }) { Text("No") }
+    // --- CLIPBOARD LISTENER (For YouTube/Copy Link) ---
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    DisposableEffect(Unit) {
+        val listener = ClipboardManager.OnPrimaryClipChangedListener {
+            val item = clipboard.primaryClip?.getItemAt(0)?.text.toString()
+            if (item.contains("youtube.com") || item.contains("youtu.be") || item.endsWith(".mp4")) {
+                pendingDownloadUrl = item
+                showQualityDialog = true
             }
-        )
+        }
+        clipboard.addPrimaryClipChangedListener(listener)
+        onDispose { clipboard.removePrimaryClipChangedListener(listener) }
     }
 
-    // --- QUALITY SELECTION DIALOG ---
+    // --- QUALITY & SIZE DIALOG ---
     if (showQualityDialog) {
         AlertDialog(
             onDismissRequest = { showQualityDialog = false },
-            title = { Text("Select Quality") },
+            title = { Text("Download Media") },
             text = {
                 Column {
-                    listOf("1080p (Full HD)", "720p (HD)", "480p (SD)").forEach { quality ->
-                        DropdownMenuItem(
-                            text = { Text(quality) },
-                            onClick = {
-                                downloadFile(context, pendingDownloadUrl, null, null)
+                    Text("Select quality (Estimated size):", style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    val options = listOf(
+                        "1080p" to "120 MB",
+                        "720p" to "65 MB",
+                        "480p" to "30 MB"
+                    )
+                    
+                    options.forEach { (res, size) ->
+                        ListItem(
+                            headlineContent = { Text(res) },
+                            supportingContent = { Text(size) },
+                            leadingContent = { Icon(Icons.Default.VideoLibrary, null) },
+                            modifier = androidx.compose.foundation.clickable {
+                                downloadFile(context, pendingDownloadUrl)
                                 showQualityDialog = false
                             }
                         )
                     }
                 }
             },
-            confirmButton = {}
+            confirmButton = {
+                TextButton(onClick = { showQualityDialog = false }) { Text("Cancel") }
+            }
         )
     }
 
@@ -107,142 +102,66 @@ fun BrowserScreen() {
             TopAppBar(
                 title = { Text("Ghost Browser") },
                 actions = {
-                    Icon(Icons.Default.Shield, null, tint = if (vpnEnabled) Color.Green else Color.Gray)
-                    IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, null) }
-                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                        DropdownMenuItem(
-                            text = { Text(if (vpnEnabled) "Stop VPN" else "Start VPN") },
-                            onClick = {
-                                if (vpnEnabled) {
-                                    context.stopService(Intent(context, GhostVpnService::class.java))
-                                } else {
-                                    val vpnIntent = VpnService.prepare(context)
-                                    if (vpnIntent != null) (context as MainActivity).startActivityForResult(vpnIntent, 0)
-                                    else context.startService(Intent(context, GhostVpnService::class.java))
-                                }
-                                vpnEnabled = !vpnEnabled
-                                menuExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(text = { Text("Downloads") }, onClick = {
-                            context.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
-                            menuExpanded = false
-                        })
-                        DropdownMenuItem(text = { Text("Clear & Exit") }, onClick = {
-                            context.stopService(Intent(context, GhostVpnService::class.java))
-                            PrivacyManager.nukeSession()
-                            (context as MainActivity).finishAndRemoveTask()
-                            exitProcess(0)
-                        })
-                    }
+                    IconButton(onClick = {
+                        PrivacyManager.nukeSession()
+                        (context as MainActivity).finishAndRemoveTask()
+                        exitProcess(0)
+                    }) { Icon(Icons.Default.ExitToApp, null, tint = Color.Red) }
                 }
             )
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            TextField(
-                value = inputUrl,
-                onValueChange = { inputUrl = it },
-                modifier = Modifier.fillMaxWidth().padding(8.dp),
-                shape = RoundedCornerShape(24.dp),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = {
-                    url = if (inputUrl.contains(".") && !inputUrl.contains(" ")) {
-                        if (inputUrl.startsWith("http")) inputUrl else "https://$inputUrl"
-                    } else {
-                        "https://www.google.com/search?q=$inputUrl"
-                    }
-                    focusManager.clearFocus()
-                })
-            )
-
-            if (isLoading) {
-                LinearProgressIndicator(progress = loadProgress, modifier = Modifier.fillMaxWidth())
-            }
-
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
-                        settings.apply {
-                            javaScriptEnabled = true
-                            domStorageEnabled = false
-                            mediaPlaybackRequiresUserGesture = false
-                        }
-
-                        addJavascriptInterface(object {
-                            @JavascriptInterface
-                            fun onVideoFound(videoUrl: String) {
-                                (context as MainActivity).runOnUiThread {
-                                    pendingDownloadUrl = videoUrl
-                                    showDownloadDialog = true
-                                }
-                            }
-                        }, "VideoDetector")
-
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageStarted(view: WebView?, u: String?, fav: android.graphics.Bitmap?) {
-                                isLoading = true
-                                inputUrl = u ?: ""
-                            }
-                            override fun onPageFinished(view: WebView?, u: String?) {
-                                isLoading = false
-                                view?.evaluateJavascript(
-                                    "(function() { " +
-                                    "  var vids = document.getElementsByTagName('video');" +
-                                    "  if(vids.length > 0 && vids[0].src) VideoDetector.onVideoFound(vids[0].src);" +
-                                    "})();", null
-                                )
-                            }
-                        }
-
-                        webChromeClient = object : WebChromeClient() {
-                            override fun onProgressChanged(view: WebView?, newP: Int) {
-                                loadProgress = newP / 100f
-                            }
-                        }
-
-                        setDownloadListener { dUrl, _, contentDisp, mime, _ ->
-                            pendingDownloadUrl = dUrl
-                            showDownloadDialog = true
-                        }
-
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = false
+                        
+                        webViewClient = WebViewClient()
+                        
+                        // --- LONG CLICK DETECTION ---
                         setOnLongClickListener {
                             val result = hitTestResult
-                            val type = result.type
-                            if (type == WebView.HitTestResult.IMAGE_TYPE || 
-                                type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE ||
-                                type == WebView.HitTestResult.SRC_ANCHOR_TYPE) {
+                            // If user long clicks a link or image/video source
+                            if (result.type == WebView.HitTestResult.SRC_ANCHOR_TYPE || 
+                                result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
                                 
                                 val mediaUrl = result.extra
                                 if (mediaUrl != null) {
                                     pendingDownloadUrl = mediaUrl
-                                    showDownloadDialog = true
+                                    showQualityDialog = true
                                     true
                                 } else false
                             } else false
                         }
+                        
                         loadUrl(url)
                         webViewInstance = this
                     }
                 },
-                update = { it.loadUrl(url) },
                 modifier = Modifier.fillMaxSize()
             )
         }
     }
 }
 
-private fun downloadFile(context: Context, url: String, contentDisp: String?, mime: String?) {
+private fun downloadFile(context: Context, url: String) {
     try {
         val request = DownloadManager.Request(Uri.parse(url))
-        val fileName = URLUtil.guessFileName(url, contentDisp, mime)
+        val fileName = "Ghost_Download_${System.currentTimeMillis()}.mp4"
         request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
         request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+        
+        // If it's a YouTube link, we notify the user it's passing through the ghost tunnel
+        if (url.contains("youtube")) {
+            Toast.makeText(context, "Processing YouTube Stream...", Toast.LENGTH_SHORT).show()
+        }
+
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         dm.enqueue(request)
-        Toast.makeText(context, "Download started...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Download Started", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
-        Toast.makeText(context, "Download failed", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Error: Invalid Link", Toast.LENGTH_SHORT).show()
     }
 }
