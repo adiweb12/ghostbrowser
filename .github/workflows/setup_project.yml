@@ -17,16 +17,17 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: '' 
 
-    - name: Generate Project Structure & Resources
+    - name: Cleanup and Generate Structure
       run: |
-        # 1. Create Folder Hierarchy
+        # Remove any old attempts to avoid "directory exists" errors
+        rm -rf app
+        
+        # 1. Create Folder Hierarchy (Corrected)
         mkdir -p app/src/main/java/com/example/ghostbrowser
         mkdir -p app/src/main/res/values
-        mkdir -p app/src/main/AndroidManifest.xml
 
-        # 2. Create the Manifest (Updated with Special Use permission)
+        # 2. Create the Manifest File
         cat <<EOF > app/src/main/AndroidManifest.xml
         <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -61,7 +62,7 @@ jobs:
         </manifest>
         EOF
 
-        # 3. Create necessary Material3 resources
+        # 3. Create Material3 resources
         cat <<EOF > app/src/main/res/values/colors.xml
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
@@ -72,20 +73,16 @@ jobs:
         cat <<EOF > app/src/main/res/values/themes.xml
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
-            <style name="Theme.Material3.DayNight.NoActionBar" parent="android:Theme.Material.NoActionBar" />
+            <style name="Theme.Material3.DayNight.NoActionBar" parent="android:Theme.DeviceDefault.NoActionBar" />
         </resources>
         EOF
 
     - name: Auto-Arrange Kotlin Files
       run: |
-        # This moves any .kt files from your root folder into the correct package folder
-        if [ -f "MainActivity.kt" ]; then
-          mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
-        fi
-        
-        if [ -f "GhostBrowserService.kt" ]; then
-          mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
-        fi
+        # Move files from root to the correct package path
+        [ -f "MainActivity.kt" ] && mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
+        [ -f "GhostBrowserService.kt" ] && mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
+        echo "Files arranged."
 
     - name: Setup Gradle Files
       run: |
