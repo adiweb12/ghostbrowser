@@ -7,7 +7,6 @@ import android.webkit.*
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -16,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
@@ -35,8 +33,7 @@ class MainActivity : ComponentActivity() {
                     BrowserWithVpn(
                         onStartVpn = { startVpn() },
                         onStopVpn = { stopService(Intent(this, GhostVpnService::class.java)) },
-                        onExit = { 
-                            // Nuke data and kill process
+                        onExit = {
                             stopService(Intent(this, GhostVpnService::class.java))
                             PrivacyManager.nukeSession()
                             finishAndRemoveTask()
@@ -50,18 +47,8 @@ class MainActivity : ComponentActivity() {
 
     private fun startVpn() {
         val intent = VpnService.prepare(this)
-        if (intent != null) {
-            startActivityForResult(intent, 0)
-        } else {
-            startService(Intent(this, GhostVpnService::class.java))
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (resultCode == RESULT_OK) {
-            startService(Intent(this, GhostVpnService::class.java))
-        }
+        if (intent != null) startActivityForResult(intent, 0)
+        else startService(Intent(this, GhostVpnService::class.java))
     }
 }
 
@@ -72,77 +59,81 @@ fun BrowserWithVpn(onStartVpn: () -> Unit, onStopVpn: () -> Unit, onExit: () -> 
     var inputUrl by remember { mutableStateOf("https://www.google.com") }
     var menuExpanded by remember { mutableStateOf(false) }
     var vpnEnabled by remember { mutableStateOf(false) }
+    var loadProgress by remember { mutableFloatStateOf(0f) }
+    var isLoading by remember { mutableStateOf(false) }
+    
     val focusManager = LocalFocusManager.current
-    val webViewRef = remember { mutableStateOf<WebView?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ghost Browser", style = MaterialTheme.typography.titleMedium) },
+                title = { Text("Ghost Browser") },
                 actions = {
-                    Icon(
-                        Icons.Default.Shield, 
-                        contentDescription = null, 
-                        tint = if (vpnEnabled) Color.Green else Color.Gray,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Menu")
-                    }
+                    Icon(Icons.Default.Shield, null, tint = if (vpnEnabled) Color.Green else Color.Gray)
+                    IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, null) }
                     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                         DropdownMenuItem(
                             text = { Text(if (vpnEnabled) "Stop VPN" else "Start VPN") },
-                            onClick = { 
+                            onClick = {
                                 if (vpnEnabled) onStopVpn() else onStartVpn()
                                 vpnEnabled = !vpnEnabled
-                                menuExpanded = false 
-                            },
-                            leadingIcon = { Icon(Icons.Default.Lock, null) }
+                                menuExpanded = false
+                            }
                         )
-                        DropdownMenuItem(
-                            text = { Text("Clear & Exit") },
-                            onClick = { onExit() },
-                            leadingIcon = { Icon(Icons.Default.Delete, null) }
-                        )
+                        DropdownMenuItem(text = { Text("Clear & Exit") }, onClick = onExit)
                     }
                 }
             )
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            // Address Bar (FIXED SEARCH)
+            // Address Bar
             TextField(
                 value = inputUrl,
                 onValueChange = { inputUrl = it },
                 modifier = Modifier.fillMaxWidth().padding(8.dp),
                 shape = RoundedCornerShape(24.dp),
-                placeholder = { Text("Search or type URL") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = {
-                    val target = if (inputUrl.contains(".") && !inputUrl.contains(" ")) {
+                    val formattedUrl = if (inputUrl.contains(".") && !inputUrl.contains(" ")) {
                         if (inputUrl.startsWith("http")) inputUrl else "https://$inputUrl"
                     } else {
                         "https://www.google.com/search?q=$inputUrl"
                     }
-                    url = target
+                    url = formattedUrl
                     focusManager.clearFocus()
-                }),
-                trailingIcon = {
-                    IconButton(onClick = { webViewRef.value?.reload() }) {
-                        Icon(Icons.Default.Refresh, null)
-                    }
-                }
+                })
             )
+
+            // Loading Bar
+            if (isLoading) {
+                LinearProgressIndicator(
+                    progress = { loadProgress },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
 
             AndroidView(
                 factory = { context ->
                     WebView(context).apply {
                         settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = false
-                        webViewClient = WebViewClient()
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                                isLoading = true
+                            }
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                isLoading = false
+                                loadProgress = 0f
+                            }
+                        }
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                                loadProgress = newProgress / 100f
+                            }
+                        }
                         loadUrl(url)
-                        webViewRef.value = this
                     }
                 },
                 update = { it.loadUrl(url) },
