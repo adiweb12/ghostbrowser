@@ -23,14 +23,21 @@ jobs:
       with:
         gradle-version: 8.5
 
-    - name: Initialize Project Structure
+    - name: Initialize Project Structure & Files
       run: |
-        # 1. Clean up and create directories
+        # 1. Clean and Create Folders
         rm -rf app
         mkdir -p app/src/main/java/com/example/ghostbrowser
         mkdir -p app/src/main/res/values
 
-        # 2. Create the Android Manifest
+        # 2. Create gradle.properties (FIXES THE ANDROIDX ERROR)
+        cat <<EOF > gradle.properties
+        android.useAndroidX=true
+        android.enableJetifier=true
+        org.gradle.jvmargs=-Xmx2048m
+        EOF
+
+        # 3. Create the Android Manifest
         cat <<EOF > app/src/main/AndroidManifest.xml
         <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -65,7 +72,7 @@ jobs:
         </manifest>
         EOF
 
-        # 3. Create Required Resource Files
+        # 4. Create Material3 resources
         cat <<EOF > app/src/main/res/values/colors.xml
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
@@ -82,19 +89,19 @@ jobs:
 
     - name: Move and Arrange Kotlin Files
       run: |
-        # Check if files exist in root and move them to the package folder
+        # Move Kotlin files from the main repo folder into the app package
         if [ -f "MainActivity.kt" ]; then
           mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
-          echo "Moved MainActivity.kt"
+          echo "Arranged MainActivity.kt"
         fi
         if [ -f "GhostBrowserService.kt" ]; then
           mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
-          echo "Moved GhostBrowserService.kt"
+          echo "Arranged GhostBrowserService.kt"
         fi
 
     - name: Generate Build Scripts
       run: |
-        # settings.gradle
+        # Root settings.gradle
         echo "include ':app'" > settings.gradle
 
         # Root build.gradle
@@ -109,7 +116,7 @@ jobs:
         allprojects { repositories { google(); mavenCentral() } }
         EOF
 
-        # App build.gradle
+        # App level build.gradle
         cat <<EOF > app/build.gradle
         plugins {
             id 'com.android.application'
@@ -142,8 +149,8 @@ jobs:
     - name: Build APK with Gradle 8.5
       run: gradle assembleDebug
 
-    - name: Upload APK
+    - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: GhostBrowser-Debug-APK
+        name: GhostBrowser-APK
         path: app/build/outputs/apk/debug/app-debug.apk
