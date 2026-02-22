@@ -18,16 +18,19 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Cleanup and Generate Structure
+    - name: Setup Gradle 8.5
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: 8.5
+
+    - name: Initialize Project Structure
       run: |
-        # Remove any old attempts to avoid "directory exists" errors
+        # 1. Clean up and create directories
         rm -rf app
-        
-        # 1. Create Folder Hierarchy (Corrected)
         mkdir -p app/src/main/java/com/example/ghostbrowser
         mkdir -p app/src/main/res/values
 
-        # 2. Create the Manifest File
+        # 2. Create the Android Manifest
         cat <<EOF > app/src/main/AndroidManifest.xml
         <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -62,7 +65,7 @@ jobs:
         </manifest>
         EOF
 
-        # 3. Create Material3 resources
+        # 3. Create Required Resource Files
         cat <<EOF > app/src/main/res/values/colors.xml
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
@@ -77,17 +80,24 @@ jobs:
         </resources>
         EOF
 
-    - name: Auto-Arrange Kotlin Files
+    - name: Move and Arrange Kotlin Files
       run: |
-        # Move files from root to the correct package path
-        [ -f "MainActivity.kt" ] && mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
-        [ -f "GhostBrowserService.kt" ] && mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
-        echo "Files arranged."
+        # Check if files exist in root and move them to the package folder
+        if [ -f "MainActivity.kt" ]; then
+          mv MainActivity.kt app/src/main/java/com/example/ghostbrowser/
+          echo "Moved MainActivity.kt"
+        fi
+        if [ -f "GhostBrowserService.kt" ]; then
+          mv GhostBrowserService.kt app/src/main/java/com/example/ghostbrowser/
+          echo "Moved GhostBrowserService.kt"
+        fi
 
-    - name: Setup Gradle Files
+    - name: Generate Build Scripts
       run: |
+        # settings.gradle
         echo "include ':app'" > settings.gradle
 
+        # Root build.gradle
         cat <<EOF > build.gradle
         buildscript {
             repositories { google(); mavenCentral() }
@@ -99,6 +109,7 @@ jobs:
         allprojects { repositories { google(); mavenCentral() } }
         EOF
 
+        # App build.gradle
         cat <<EOF > app/build.gradle
         plugins {
             id 'com.android.application'
@@ -128,14 +139,11 @@ jobs:
         }
         EOF
 
-    - name: Build Debug APK
-      run: |
-        gradle wrapper
-        chmod +x gradlew
-        ./gradlew assembleDebug
+    - name: Build APK with Gradle 8.5
+      run: gradle assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: GhostBrowser-APK
+        name: GhostBrowser-Debug-APK
         path: app/build/outputs/apk/debug/app-debug.apk
