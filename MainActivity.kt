@@ -109,7 +109,7 @@ fun BrowserWithVpn(onStartVpn: () -> Unit, onStopVpn: () -> Unit, onExit: () -> 
             // Loading Bar
             if (isLoading) {
                 LinearProgressIndicator(
-                    progress = { loadProgress },
+                    progress =  loadProgress ,
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.primary
                 )
