@@ -1,155 +1,72 @@
-package com.example.kotlinbrowser
+package com.example.ghostbrowser
 
 import android.annotation.SuppressLint
-import android.graphics.Bitmap
+import android.content.Intent
 import android.os.Bundle
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        
+        // Start the Ghost Service
+        startService(Intent(this, GhostBrowserService::class.java))
+
         setContent {
-            MaterialTheme {
+            Surface(color = MaterialTheme.colorScheme.background) {
                 BrowserScreen()
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserScreen() {
     var url by remember { mutableStateOf("https://www.google.com") }
-    var inputTxt by remember { mutableStateOf("https://www.google.com") }
-    var webView: WebView? by remember { mutableStateOf(null) }
-    var progressValue by remember { mutableIntStateOf(0) }
-    val focusManager = LocalFocusManager.current
+    var textFieldValue by remember { mutableStateOf("https://www.google.com") }
+    var webView: WebView? = null
 
-    BackHandler(enabled = webView?.canGoBack() == true) {
-        webView?.goBack()
-    }
-
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
-            Column(modifier = Modifier.statusBarsPadding()) {
-                TextField(
-                    value = inputTxt,
-                    onValueChange = { inputTxt = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    placeholder = { Text("Search Google or type URL") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        IconButton(onClick = { webView?.reload() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = null)
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(
-                        onGo = {
-                            val formattedUrl = if (inputTxt.contains(".")) {
-                                if (inputTxt.startsWith("http")) inputTxt else "https://$inputTxt"
-                            } else {
-                                "https://www.google.com/search?q=$inputTxt"
-                            }
-                            url = formattedUrl
-                            focusManager.clearFocus()
-                        }
-                    ),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
-                    )
-                )
-                
-                if (progressValue < 100) {
-                    // FIXED: Removed lambda brackets to satisfy Material3 API
-                    LinearProgressIndicator(
-                        progress = progressValue / 100f,
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-        }
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
-            ComposeWebView(
-                url = url,
-                onProgressChanged = { progressValue = it },
-                onUrlChanged = { 
-                    inputTxt = it 
-                    url = it
-                },
-                onWebViewCreated = { webView = it }
+    Column(modifier = Modifier.fillMaxSize()) {
+        // URL Bar
+        Row(modifier = Modifier.padding(8.dp).fillMaxWidth()) {
+            TextField(
+                value = textFieldValue,
+                onValueChange = { textFieldValue = it },
+                modifier = Modifier.weight(1f),
+                label = { Text("Search or type URL") }
             )
+            Button(
+                onClick = { url = textFieldValue },
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
+                Text("Go")
+            }
         }
-    }
-}
 
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-fun ComposeWebView(
-    url: String,
-    onProgressChanged: (Int) -> Unit,
-    onUrlChanged: (String) -> Unit,
-    onWebViewCreated: (WebView) -> Unit
-) {
-    AndroidView(
-        factory = { context ->
-            WebView(context).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.loadWithOverviewMode = true
-                settings.useWideViewPort = true
-                
-                webViewClient = object : WebViewClient() {
-                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                        url?.let { onUrlChanged(it) }
-                    }
+        // Web Content
+        AndroidView(
+            factory = { context ->
+                WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    webViewClient = WebViewClient()
+                    loadUrl(url)
+                    webView = this
                 }
-
-                webChromeClient = object : WebChromeClient() {
-                    override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                        onProgressChanged(newProgress)
-                    }
-                }
-                
-                onWebViewCreated(this)
-                loadUrl(url)
-            }
-        },
-        update = { view ->
-            if (view.url != url) {
+            },
+            update = { view ->
                 view.loadUrl(url)
-            }
-        },
-        modifier = Modifier.fillMaxSize()
-    )
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
 }
