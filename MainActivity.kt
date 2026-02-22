@@ -79,22 +79,16 @@ fun BrowserScreen() {
                                 menuExpanded = false
                             }
                         )
-                        DropdownMenuItem(
-                            text = { Text("Downloads") },
-                            onClick = {
-                                context.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
-                                menuExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Clear & Exit") },
-                            onClick = {
-                                context.stopService(Intent(context, GhostVpnService::class.java))
-                                PrivacyManager.nukeSession()
-                                (context as ComponentActivity).finishAndRemoveTask()
-                                exitProcess(0)
-                            }
-                        )
+                        DropdownMenuItem(text = { Text("Downloads") }, onClick = {
+                            context.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
+                            menuExpanded = false
+                        })
+                        DropdownMenuItem(text = { Text("Clear & Exit") }, onClick = {
+                            context.stopService(Intent(context, GhostVpnService::class.java))
+                            PrivacyManager.nukeSession()
+                            (context as MainActivity).finishAndRemoveTask()
+                            exitProcess(0)
+                        })
                     }
                 }
             )
@@ -115,24 +109,32 @@ fun BrowserScreen() {
                         "https://www.google.com/search?q=$inputUrl"
                     }
                     focusManager.clearFocus()
-                }),
-                trailingIcon = { IconButton(onClick = { webViewInstance?.reload() }) { Icon(Icons.Default.Refresh, null) } }
+                })
             )
 
             if (isLoading) {
-                LinearProgressIndicator(
-                    progress = loadProgress,
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                LinearProgressIndicator(progress = loadProgress, modifier = Modifier.fillMaxWidth())
             }
 
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = false
-                        
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = false
+                            mediaPlaybackRequiresUserGesture = false
+                        }
+
+                        // VIDEO DETECTION INTERFACE
+                        addJavascriptInterface(object {
+                            @JavascriptInterface
+                            fun onVideoFound(videoUrl: String) {
+                                (context as MainActivity).runOnUiThread {
+                                    Toast.makeText(context, "Video Detected! Long press to download.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }, "VideoDetector")
+
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, u: String?, fav: android.graphics.Bitmap?) {
                                 isLoading = true
@@ -140,9 +142,16 @@ fun BrowserScreen() {
                             }
                             override fun onPageFinished(view: WebView?, u: String?) {
                                 isLoading = false
+                                // Script to find videos in main page and iframes
+                                view?.evaluateJavascript(
+                                    "(function() { " +
+                                    "  var vids = document.getElementsByTagName('video');" +
+                                    "  if(vids.length > 0) VideoDetector.onVideoFound(vids[0].src);" +
+                                    "})();", null
+                                )
                             }
                         }
-                        
+
                         webChromeClient = object : WebChromeClient() {
                             override fun onProgressChanged(view: WebView?, newP: Int) {
                                 loadProgress = newP / 100f
@@ -150,28 +159,22 @@ fun BrowserScreen() {
                         }
 
                         setDownloadListener { dUrl, _, contentDisp, mime, _ ->
-                            val request = DownloadManager.Request(Uri.parse(dUrl))
-                            val fileName = URLUtil.guessFileName(dUrl, contentDisp, mime)
-                            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-                            val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                            dm.enqueue(request)
-                            Toast.makeText(ctx, "Downloading...", Toast.LENGTH_SHORT).show()
+                            downloadFile(ctx, dUrl, contentDisp, mime)
                         }
 
                         setOnLongClickListener {
                             val result = hitTestResult
-                            if (result.type == WebView.HitTestResult.IMAGE_TYPE || result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+                            val type = result.type
+                            if (type == WebView.HitTestResult.IMAGE_TYPE || 
+                                type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE ||
+                                type == WebView.HitTestResult.VIDEO_TYPE ||
+                                type == WebView.HitTestResult.SRC_ANCHOR_TYPE) {
+                                
                                 val mediaUrl = result.extra
                                 if (mediaUrl != null) {
-                                    val request = DownloadManager.Request(Uri.parse(mediaUrl))
-                                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "ghost_${System.currentTimeMillis()}")
-                                    val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                                    dm.enqueue(request)
-                                    Toast.makeText(ctx, "Saving media...", Toast.LENGTH_SHORT).show()
-                                }
-                                true
+                                    downloadFile(ctx, mediaUrl, null, null)
+                                    true
+                                } else false
                             } else false
                         }
                         loadUrl(url)
@@ -182,5 +185,19 @@ fun BrowserScreen() {
                 modifier = Modifier.fillMaxSize()
             )
         }
+    }
+}
+
+private fun downloadFile(context: Context, url: String, contentDisp: String?, mime: String?) {
+    try {
+        val request = DownloadManager.Request(Uri.parse(url))
+        val fileName = URLUtil.guessFileName(url, contentDisp, mime)
+        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        dm.enqueue(request)
+        Toast.makeText(context, "Download started: $fileName", Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        Toast.makeText(context, "Download failed", Toast.LENGTH_SHORT).show()
     }
 }
