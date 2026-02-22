@@ -28,6 +28,18 @@ jobs:
         mkdir -p app/src/main/java/com/example/ghostbrowser
         mkdir -p app/src/main/res/values
 
+    - name: Create Global Configs
+      run: |
+        # Fix for the AndroidX error
+        cat <<EOF > gradle.properties
+        android.useAndroidX=true
+        android.enableJetifier=true
+        org.gradle.jvmargs=-Xmx2048m
+        EOF
+
+        # Standard settings
+        echo "include ':app'" > settings.gradle
+
     - name: Generate AndroidManifest & Resources
       run: |
         cat <<EOF > app/src/main/AndroidManifest.xml
@@ -79,15 +91,12 @@ jobs:
 
     - name: Move Manual Kotlin Files
       run: |
-        # Moving files from root to the package folder
-        # We use 'find' to avoid errors if files are missing or already moved
+        # Organize your manually added root files into the project structure
         find . -maxdepth 1 -name "*.kt" -exec mv {} app/src/main/java/com/example/ghostbrowser/ \;
         echo "Kotlin files organized."
 
     - name: Setup Build Scripts
       run: |
-        echo "include ':app'" > settings.gradle
-        
         cat <<EOF > build.gradle
         buildscript {
             repositories { google(); mavenCentral() }
@@ -121,8 +130,10 @@ jobs:
             implementation 'androidx.activity:activity-compose:1.8.2'
             implementation platform('androidx.compose:compose-bom:2023.08.00')
             implementation 'androidx.compose.ui:ui'
+            implementation 'androidx.compose.ui:ui-graphics'
             implementation 'androidx.compose.material3:material3'
             implementation 'androidx.compose.material:material-icons-extended'
+            implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.1'
         }
         EOF
 
