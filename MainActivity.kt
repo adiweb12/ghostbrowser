@@ -125,12 +125,11 @@ fun BrowserScreen() {
                             mediaPlaybackRequiresUserGesture = false
                         }
 
-                        // VIDEO DETECTION INTERFACE
                         addJavascriptInterface(object {
                             @JavascriptInterface
                             fun onVideoFound(videoUrl: String) {
                                 (context as MainActivity).runOnUiThread {
-                                    Toast.makeText(context, "Video Detected! Long press to download.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Video detected!", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }, "VideoDetector")
@@ -142,7 +141,6 @@ fun BrowserScreen() {
                             }
                             override fun onPageFinished(view: WebView?, u: String?) {
                                 isLoading = false
-                                // Script to find videos in main page and iframes
                                 view?.evaluateJavascript(
                                     "(function() { " +
                                     "  var vids = document.getElementsByTagName('video');" +
@@ -158,16 +156,16 @@ fun BrowserScreen() {
                             }
                         }
 
-                        setDownloadListener { dUrl, _, contentDisp, mime, _ ->
+                        setDownloadListener { dUrl, userAgent, contentDisp, mime, _ ->
                             downloadFile(ctx, dUrl, contentDisp, mime)
                         }
 
                         setOnLongClickListener {
                             val result = hitTestResult
                             val type = result.type
+                            // Removed VIDEO_TYPE to fix compilation error
                             if (type == WebView.HitTestResult.IMAGE_TYPE || 
                                 type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE ||
-                                type == WebView.HitTestResult.VIDEO_TYPE ||
                                 type == WebView.HitTestResult.SRC_ANCHOR_TYPE) {
                                 
                                 val mediaUrl = result.extra
@@ -196,7 +194,7 @@ private fun downloadFile(context: Context, url: String, contentDisp: String?, mi
         request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         dm.enqueue(request)
-        Toast.makeText(context, "Download started: $fileName", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Downloading: $fileName", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         Toast.makeText(context, "Download failed", Toast.LENGTH_SHORT).show()
     }
