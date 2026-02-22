@@ -1,9 +1,8 @@
 package com.example.ghostbrowser
 
+import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
-import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.lang.Thread
 
 class GhostVpnService : VpnService(), Runnable {
@@ -20,18 +19,15 @@ class GhostVpnService : VpnService(), Runnable {
 
     override fun run() {
         try {
-            val builder = Builder()
-            vpnInterface = builder.setSession("GhostVPN")
+            vpnInterface = Builder()
+                .setSession("GhostVPN")
                 .addAddress("10.0.0.2", 32)
                 .addRoute("0.0.0.0", 0)
-                .addDnsServer("8.8.8.8")
+                .addDnsServer("1.1.1.1")
                 .establish()
 
-            // For a production VPN, you would read/write packets between 
-            // the 'vpnInterface' and a remote server here. 
-            // For a local "Ghost" tunnel, we just keep the interface alive.
             while (!Thread.interrupted()) {
-                Thread.sleep(1000)
+                Thread.sleep(2000)
             }
         } catch (e: Exception) {
             e.printStackTrace()
