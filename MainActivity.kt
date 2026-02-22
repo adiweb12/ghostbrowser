@@ -7,6 +7,7 @@ import android.webkit.*
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,9 +29,16 @@ import androidx.compose.ui.viewinterop.AndroidView
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Makes the app go behind the status bar for a modern look
+        enableEdgeToEdge()
+        
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = Color(0xFF121212)
+                ) {
                     ModernBrowser()
                 }
             }
@@ -44,28 +52,31 @@ fun ModernBrowser() {
     var url by remember { mutableStateOf("https://www.google.com") }
     var inputUrl by remember { mutableStateOf("https://www.google.com") }
     var isLoading by remember { mutableStateOf(false) }
-    var progress by remember { mutableIntStateOf(0) }
+    var progress by remember { mutableFloatStateOf(0f) }
     
     val focusManager = LocalFocusManager.current
-
-    // Remember WebView across recompositions for speed
     val rememberedWebView = remember { mutableStateOf<WebView?>(null) }
 
-    // Handle Back Button
+    // Handle Hardware Back Button
     BackHandler {
         if (rememberedWebView.value?.canGoBack() == true) {
             rememberedWebView.value?.goBack()
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF121212))) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .systemBarsPadding() // Prevents UI from being under the status/nav bars
+    ) {
         
         // --- MODERN ADDRESS BAR ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp)
-                .background(Color(0xFF2C2C2C), RoundedCornerShape(25.dp))
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .height(56.dp)
+                .background(Color(0xFF2C2C2C), RoundedCornerShape(28.dp))
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -79,56 +90,74 @@ fun ModernBrowser() {
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
                     focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
+                    unfocusedIndicatorColor = Color.Transparent,
+                    cursorColor = MaterialTheme.colorScheme.primary
                 ),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = {
-                    url = if (inputUrl.startsWith("http")) inputUrl else "https://www.google.com/search?q=$inputUrl"
+                    val target = if (inputUrl.contains(".") && !inputUrl.contains(" ")) {
+                        if (inputUrl.startsWith("http")) inputUrl else "https://$inputUrl"
+                    } else {
+                        "https://www.google.com/search?q=$inputUrl"
+                    }
+                    url = target
                     focusManager.clearFocus()
                 })
             )
             
-            IconButton(onClick = { rememberedWebView.value?.reload() }) {
-                Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White)
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                IconButton(onClick = { rememberedWebView.value?.reload() }) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White)
+                }
             }
         }
 
-        // --- PROGRESS INDICATOR ---
+        // --- PROGRESS BAR (FIXED VERSION) ---
         if (isLoading) {
+            // Using the simpler Float version to avoid the lambda error in older M3 versions
             LinearProgressIndicator(
-                progress = { progress / 100f },
-                modifier = Modifier.fillMaxWidth().height(2.dp),
-                color = MaterialTheme.colorScheme.primary
+                progress = progress, 
+                modifier = Modifier.fillMaxWidth().height(3.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = Color.Transparent
             )
         }
 
-        // --- OPTIMIZED WEBVIEW ---
+        // --- WEBVIEW CONTAINER ---
         AndroidView(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.fillMaxSize(),
             factory = { context ->
                 WebView(context).apply {
                     settings.apply {
                         javaScriptEnabled = true
-                        domStorageEnabled = true // Essential for modern sites
-                        loadsImagesAutomatically = true
-                        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                        cacheMode = WebSettings.LOAD_DEFAULT // Faster loading
+                        domStorageEnabled = true
+                        databaseEnabled = true
+                        useWideViewPort = true
+                        loadWithOverviewMode = true
+                        cacheMode = WebSettings.LOAD_DEFAULT
                     }
                     
                     webViewClient = object : WebViewClient() {
-                        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                        override fun onPageStarted(view: WebView?, u: String?, favicon: Bitmap?) {
                             isLoading = true
-                            inputUrl = url ?: ""
+                            inputUrl = u ?: ""
                         }
-                        override fun onPageFinished(view: WebView?, url: String?) {
+                        override fun onPageFinished(view: WebView?, u: String?) {
                             isLoading = false
                         }
                     }
 
                     webChromeClient = object : WebChromeClient() {
                         override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                            progress = newProgress
+                            // Convert 0-100 to 0.0-1.0
+                            progress = newProgress / 100f
                         }
                     }
                     
@@ -137,6 +166,7 @@ fun ModernBrowser() {
                 }
             },
             update = { view ->
+                // Only load if the URL is actually different to prevent flickering
                 if (view.url != url) {
                     view.loadUrl(url)
                 }
